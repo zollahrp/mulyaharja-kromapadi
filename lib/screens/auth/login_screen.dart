@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:mulyaharja_kromapadi/screens/auth/register_screen.dart';
 import 'package:mulyaharja_kromapadi/screens/main_navigation.dart';
+import 'package:mulyaharja_kromapadi/services/auth_service.dart';
 import '../../utils/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -11,8 +12,20 @@ class LoginScreen extends StatefulWidget {
 }
 
 class _LoginScreenState extends State<LoginScreen> {
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _passwordController = TextEditingController();
+  final AuthService _authService = AuthService();
   bool _isPasswordVisible = false;
   bool _rememberMe = false;
+  bool _isLoading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -95,6 +108,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 hint: "Email Anda",
                                 icon: Icons.person_outline,
                                 isPassword: false,
+                                controller: _emailController,
                               ),
                               const SizedBox(height: 16),
                               
@@ -102,6 +116,7 @@ class _LoginScreenState extends State<LoginScreen> {
                                 hint: "Kata Sandi",
                                 icon: Icons.lock_outline,
                                 isPassword: true,
+                                controller: _passwordController,
                               ),
                               const SizedBox(height: 12),
 
@@ -166,13 +181,40 @@ class _LoginScreenState extends State<LoginScreen> {
                             width: double.infinity,
                             height: 52,
                             child: ElevatedButton(
-                              onPressed: () {
-                                // Navigasi ke Beranda dan hapus layar login dari riwayat (biar gak bisa di-back)
-                                Navigator.pushAndRemoveUntil(
-                                  context,
-                                  MaterialPageRoute(builder: (context) => const MainNavigation()),
-                                  (Route<dynamic> route) => false,
-                                );
+                              onPressed: _isLoading ? null : () async {
+                                setState(() {
+                                  _isLoading = true;
+                                });
+                                try {
+                                  final email = _emailController.text;
+                                  final password = _passwordController.text;
+                                  
+                                  if (email.isEmpty || password.isEmpty) {
+                                    throw Exception('Email dan Kata Sandi tidak boleh kosong');
+                                  }
+
+                                  await _authService.login(email, password);
+                                  
+                                  if (!mounted) return;
+                                  
+                                  // Navigasi ke Beranda dan hapus layar login dari riwayat (biar gak bisa di-back)
+                                  Navigator.pushAndRemoveUntil(
+                                    context,
+                                    MaterialPageRoute(builder: (context) => const MainNavigation()),
+                                    (Route<dynamic> route) => false,
+                                  );
+                                } catch (e) {
+                                  if (!mounted) return;
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(content: Text('Login Gagal: ${e.toString().replaceAll('Exception:', '').trim()}')),
+                                  );
+                                } finally {
+                                  if (mounted) {
+                                    setState(() {
+                                      _isLoading = false;
+                                    });
+                                  }
+                                }
                               },
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppColors.darkGreen,
@@ -181,60 +223,27 @@ class _LoginScreenState extends State<LoginScreen> {
                                 ),
                                 elevation: 0,
                               ),
-                              child: const Text(
-                                "Masuk",
-                                style: TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.white,
-                                ),
-                              ),
+                              child: _isLoading 
+                                ? const SizedBox(
+                                    height: 24, 
+                                    width: 24, 
+                                    child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)
+                                  )
+                                : const Text(
+                                    "Masuk",
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
                             ),
                           ),
                         ),
                         
                         const Spacer(),
 
-                        // 6. Garis "Atau lanjutkan dengan"
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 32.0),
-                          child: Row(
-                            children: [
-                              Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 16.0),
-                                child: Text(
-                                  "Atau lanjutkan dengan",
-                                  style: TextStyle(color: Colors.grey[500], fontSize: 12, fontWeight: FontWeight.w500),
-                                ),
-                              ),
-                              Expanded(child: Divider(color: Colors.grey[300], thickness: 1)),
-                            ],
-                          ),
-                        ),
-                        const SizedBox(height: 20),
 
-                        // 7. Tombol Social Login (Google & Apple)
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            _buildSocialButton(
-                              imageUrl: 'https://cdn-icons-png.flaticon.com/512/2991/2991148.png',
-                              onTap: () {
-                                print("Login with Google Ditekan");
-                              },
-                            ),
-                            const SizedBox(width: 24),
-                            _buildSocialButton(
-                              imageUrl: 'https://cdn-icons-png.flaticon.com/512/731/731985.png',
-                              onTap: () {
-                                print("Login with Apple Ditekan");
-                              },
-                            ),
-                          ],
-                        ),
-                        
-                        const Spacer(),
 
                         // 8. Teks Daftar
                         Row(
@@ -269,19 +278,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     
                     // ELEMEN DEKORASI BWD (Daun melayang di kanan pakai Asset Local)
-                    Positioned(
-                      right: -30,
-                      top: 250, 
-                      child: Opacity(
-                        opacity: 0.85,
-                        // MENGGUNAKAN IMAGE ASSET LOKAL
-                        child: Image.asset(
-                          'assets/images/tangkai-daun.png', 
-                          width: 100,
-                          height: 100,
-                        ),
-                      ),
-                    ),
+                    // Dihapus karena asset tidak ditemukan
                   ],
                 ),
               ),
@@ -292,8 +289,9 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  Widget _buildTextField({required String hint, required IconData icon, required bool isPassword}) {
+  Widget _buildTextField({required String hint, required IconData icon, required bool isPassword, TextEditingController? controller}) {
     return TextField(
+      controller: controller,
       obscureText: isPassword ? !_isPasswordVisible : false,
       style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w500),
       decoration: InputDecoration(
@@ -331,32 +329,6 @@ class _LoginScreenState extends State<LoginScreen> {
     );
   }
 
-  // Widget custom untuk tombol Social Login
-  Widget _buildSocialButton({required String imageUrl, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          shape: BoxShape.circle,
-          border: Border.all(color: Colors.grey[200]!, width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.03),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
-            ),
-          ],
-        ),
-        child: Image.network(
-          imageUrl,
-          width: 24,
-          height: 24,
-        ),
-      ),
-    );
-  }
 }
 
 class WaveClipper extends CustomClipper<Path> {

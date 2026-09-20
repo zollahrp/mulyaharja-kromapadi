@@ -27,23 +27,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: IntrinsicHeight(
                 child: Stack(
                   children: [
-                    // ELEMEN DEKORASI BWD (Daun di Kanan Atas)
-                    Positioned(
-                      right: -20,
-                      top: 40,
-                      child: Opacity(
-                        opacity: 0.8,
-                        child: Transform.rotate(
-                          angle: 0.5, // Sedikit dimiringkan biar estetik
-                          child: Image.asset(
-                            'assets/images/tangkai-daun.png',
-                            width: 90,
-                            height: 90,
-                          ),
-                        ),
-                      ),
-                    ),
-
                     // Konten Utama
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
@@ -248,23 +231,6 @@ class _RegisterScreenState extends State<RegisterScreen> {
                         ),
                         const SizedBox(height: 32),
                       ],
-                    ),
-                    
-                    // ELEMEN DEKORASI BWD (Daun di Kiri Bawah)
-                    Positioned(
-                      left: -30,
-                      bottom: 80,
-                      child: Opacity(
-                        opacity: 0.6, // Sedikit lebih pudar
-                        child: Transform.rotate(
-                          angle: -0.8,
-                          child: Image.asset(
-                            'assets/images/tangkai-daun.png',
-                            width: 120,
-                            height: 120,
-                          ),
-                        ),
-                      ),
                     ),
                   ],
                 ),
