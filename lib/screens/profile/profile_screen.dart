@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../utils/app_colors.dart';
+import '../../services/auth_service.dart';
+import '../auth/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -35,9 +37,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
               child: Text("Batal", style: TextStyle(color: Colors.grey[600], fontWeight: FontWeight.bold)),
             ),
             ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showComingSoon('Logout');
+              onPressed: () async {
+                Navigator.pop(context); // Close dialog
+                await AuthService().logout();
+                if (mounted) {
+                  Navigator.pushAndRemoveUntil(
+                    context,
+                    MaterialPageRoute(builder: (context) => const LoginScreen()),
+                    (route) => false,
+                  );
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red[600],

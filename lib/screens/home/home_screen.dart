@@ -7,6 +7,9 @@ import '../../models/user_model.dart';
 import '../../models/riwayat_scan_model.dart';
 import '../../services/auth_service.dart';
 import '../../services/scan_history_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -23,11 +26,56 @@ class _HomeScreenState extends State<HomeScreen> {
   int _beresikoCount = 0;
   int _penyakitCount = 0;
   bool _isLoading = true;
+  String _currentLocationName = "Mencari lokasi...";
 
   @override
   void initState() {
     super.initState();
     _loadData();
+    _fetchCurrentLocation();
+  }
+
+  Future<void> _fetchCurrentLocation() async {
+    try {
+      if (kIsWeb) {
+        if (mounted) setState(() => _currentLocationName = "Web Simulator");
+        return;
+      }
+
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) {
+        if (mounted) setState(() => _currentLocationName = "Lokasi tidak aktif");
+        return;
+      }
+
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied) {
+          if (mounted) setState(() => _currentLocationName = "Izin ditolak");
+          return;
+        }
+      }
+
+      if (permission == LocationPermission.deniedForever) {
+        if (mounted) setState(() => _currentLocationName = "Izin ditolak permanen");
+        return;
+      }
+
+      Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+      List<Placemark> placemarks = await Geocoding().placemarkFromCoordinates(position.latitude, position.longitude);
+      
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks.first;
+        String locationStr = [place.subLocality, place.locality].where((e) => e != null && e.isNotEmpty).join(", ");
+        if (locationStr.isEmpty) locationStr = place.administrativeArea ?? "Lokasi Ditemukan";
+        if (mounted) setState(() => _currentLocationName = locationStr);
+      } else {
+        if (mounted) setState(() => _currentLocationName = "Lokasi tidak diketahui");
+      }
+    } catch (e) {
+      if (mounted) setState(() => _currentLocationName = "Gagal memuat lokasi");
+    }
   }
 
   Future<void> _loadData() async {
@@ -251,7 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           color: AppColors.primaryGreen, size: 16),
                       const SizedBox(width: 6),
                       Text(
-                        _user?.wilayah?.name ?? "Lokasi belum diatur",
+                        _user?.wilayah?.name ?? _currentLocationName,
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,

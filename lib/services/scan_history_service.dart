@@ -3,6 +3,8 @@ import 'package:http/http.dart' as http;
 import '../models/riwayat_scan_model.dart';
 import 'api_service.dart';
 
+import 'package:camera/camera.dart';
+
 class ScanHistoryService {
   Future<List<RiwayatScanModel>> getHistory() async {
     final url = Uri.parse('${ApiService.baseUrl}/history');
@@ -24,7 +26,7 @@ class ScanHistoryService {
     required String penyakit,
     double? akurasi,
     String? tindakan,
-    String? fotoPath,
+    XFile? imageFile,
   }) async {
     final url = Uri.parse('${ApiService.baseUrl}/scan');
     final headers = await ApiService.getHeaders(requireAuth: true);
@@ -42,8 +44,13 @@ class ScanHistoryService {
       request.fields['tindakan'] = tindakan;
     }
 
-    if (fotoPath != null && fotoPath.isNotEmpty) {
-      request.files.add(await http.MultipartFile.fromPath('foto', fotoPath));
+    if (imageFile != null) {
+      final bytes = await imageFile.readAsBytes();
+      request.files.add(http.MultipartFile.fromBytes(
+        'foto',
+        bytes,
+        filename: imageFile.name,
+      ));
     }
 
     final streamedResponse = await request.send();

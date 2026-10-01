@@ -25,9 +25,9 @@ class RiwayatScanModel {
 
   factory RiwayatScanModel.fromJson(Map<String, dynamic> json) {
     return RiwayatScanModel(
-      id: json['id'],
-      userId: json['user_id'],
-      lahanId: json['lahan_id'],
+      id: json['id'] is int ? json['id'] : int.tryParse(json['id']?.toString() ?? '0') ?? 0,
+      userId: json['user_id'] is int ? json['user_id'] : int.tryParse(json['user_id']?.toString() ?? '0') ?? 0,
+      lahanId: json['lahan_id'] is int ? json['lahan_id'] : int.tryParse(json['lahan_id']?.toString() ?? '0') ?? 0,
       penyakit: json['penyakit'],
       akurasi: json['akurasi'] != null ? double.tryParse(json['akurasi'].toString()) : null,
       tindakan: json['tindakan'],

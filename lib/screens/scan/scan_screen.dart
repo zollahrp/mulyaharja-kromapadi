@@ -5,6 +5,11 @@ import '../../utils/app_colors.dart';
 import 'scan_result_screen.dart';
 import '../../models/lahan_model.dart';
 import '../../services/lahan_service.dart';
+import '../../services/auth_service.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
+import 'package:light/light.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -25,12 +30,117 @@ class _ScanScreenState extends State<ScanScreen> {
   List<LahanModel> _lahans = [];
   LahanModel? _selectedLahan;
   bool _isLoadingLahan = true;
+  bool _isCheckingLocation = true;
 
   @override
   void initState() {
     super.initState();
-    _initCamera();
-    _fetchLahans();
+    _checkLocationAndInit();
+  }
+
+  Future<void> _checkLocationAndInit() async {
+    try {
+      if (kIsWeb) {
+        // Skip strict location check on web for easier testing
+        await _fetchLahans();
+        await _initCamera();
+        return;
+      }
+
+      final authService = AuthService();
+      final user = await authService.getCurrentUser();
+      
+      if (user != null && user.wilayah != null && user.wilayah!.latitude != null && user.wilayah!.longitude != null) {
+        final targetLat = double.tryParse(user.wilayah!.latitude!);
+        final targetLng = double.tryParse(user.wilayah!.longitude!);
+        
+        if (targetLat != null && targetLng != null) {
+          bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          if (!serviceEnabled) {
+            _showLocationError('Layanan lokasi tidak aktif.');
+            return;
+          }
+          
+          LocationPermission permission = await Geolocator.checkPermission();
+          if (permission == LocationPermission.denied) {
+            permission = await Geolocator.requestPermission();
+            if (permission == LocationPermission.denied) {
+              _showLocationError('Izin lokasi ditolak.');
+              return;
+            }
+          }
+          
+          if (permission == LocationPermission.deniedForever) {
+            _showLocationError('Izin lokasi ditolak permanen.');
+            return;
+          }
+          
+          Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+          double distanceInMeters = Geolocator.distanceBetween(
+            position.latitude, position.longitude,
+            targetLat, targetLng
+          );
+          
+          // Tolerate distance, e.g. 50 km
+          if (distanceInMeters > 50000) {
+            _showLocationError('Anda tidak berada di wilayah KTD terdaftar.');
+            return;
+          }
+        }
+      } else {
+        // Fallback: If Wilayah is not fully set, verify based on city mismatch (e.g. Bogor vs Karet Tengsin)
+        if (user?.kelompokTaniName?.toLowerCase().contains('karet tengsin') ?? false) {
+          bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+          if (serviceEnabled) {
+            LocationPermission permission = await Geolocator.checkPermission();
+            if (permission == LocationPermission.denied) {
+              permission = await Geolocator.requestPermission();
+            }
+            if (permission == LocationPermission.whileInUse || permission == LocationPermission.always) {
+              Position position = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+              List<Placemark> placemarks = await Geocoding().placemarkFromCoordinates(position.latitude, position.longitude);
+              if (placemarks.isNotEmpty) {
+                String city = placemarks.first.subAdministrativeArea?.toLowerCase() ?? '';
+                String locality = placemarks.first.locality?.toLowerCase() ?? '';
+                
+                if (city.contains('bogor') || locality.contains('bogor')) {
+                  _showLocationError('Anda terdeteksi di Bogor, sedangkan KTD Anda (Karet Tengsin) berada di Jakarta Pusat.');
+                  return;
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      await _fetchLahans();
+      await _initCamera();
+    } catch (e) {
+      _showLocationError('Gagal memverifikasi lokasi: $e');
+    } finally {
+      if (mounted) setState(() => _isCheckingLocation = false);
+    }
+  }
+
+  void _showLocationError(String message) {
+    if (!mounted) return;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('Peringatan Lokasi'),
+        content: Text(message),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context); // close dialog
+              Navigator.pop(context); // close screen
+            },
+            child: const Text('Kembali', style: TextStyle(color: AppColors.primaryGreen)),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _fetchLahans() async {
@@ -124,24 +234,47 @@ class _ScanScreenState extends State<ScanScreen> {
       if (_isFlashOn) {
         await _toggleFlash();
       }
-      if (_selectedLahan == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Pilih lahan terlebih dahulu!')),
-        );
-        return;
-      }
       _navigateToResult(image);
     } catch (e) {
       debugPrint("Error taking picture: $e");
     }
   }
 
-  void _navigateToResult(XFile image) {
-    if (_selectedLahan == null) return;
+  Future<void> _navigateToResult(XFile image) async {
+    int? luxValue;
+    if (!kIsWeb) {
+      try {
+        Light light = Light();
+        luxValue = await light.lightSensorStream.first.timeout(const Duration(seconds: 2));
+      } catch (e) {
+        debugPrint("Gagal membaca sensor cahaya: $e");
+      }
+    }
+
+    int? plantAgeDays;
+    if (_selectedLahan != null) {
+      if (_selectedLahan!.hst != null) {
+        plantAgeDays = _selectedLahan!.hst;
+      } else if (_selectedLahan!.tanggalTanam != null && _selectedLahan!.tanggalTanam!.isNotEmpty) {
+        try {
+          DateTime plantingDate = DateTime.parse(_selectedLahan!.tanggalTanam!);
+          plantAgeDays = DateTime.now().difference(plantingDate).inDays;
+        } catch (e) {
+          debugPrint("Error parse tanggalTanam: $e");
+        }
+      }
+    }
+
+    if (!mounted) return;
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (context) => ScanResultScreen(imageFile: image, lahanId: _selectedLahan!.id),
+        builder: (context) => ScanResultScreen(
+          imageFile: image, 
+          lahanId: _selectedLahan?.id ?? 0,
+          luxValue: luxValue,
+          plantAgeDays: plantAgeDays,
+        ),
       ),
     );
   }
@@ -179,7 +312,6 @@ class _ScanScreenState extends State<ScanScreen> {
                 _buildCameraPreview(),
                 _buildCameraOverlay(),
                 _buildCameraControls(),
-                _buildLahanSelector(),
               ],
             ),
           ),
@@ -253,6 +385,26 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Widget _buildCameraPreview() {
+    if (_isCheckingLocation) {
+      return Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: Colors.black,
+        ),
+        child: const Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              CircularProgressIndicator(color: Colors.white),
+              SizedBox(height: 16),
+              Text("Memverifikasi lokasi...", style: TextStyle(color: Colors.white)),
+            ],
+          ),
+        ),
+      );
+    }
+
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
       decoration: BoxDecoration(
@@ -323,48 +475,7 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  Widget _buildLahanSelector() {
-    return Positioned(
-      top: 16,
-      left: 16,
-      right: 16,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.6),
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: _isLoadingLahan 
-          ? const Padding(
-              padding: EdgeInsets.all(8.0),
-              child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2)),
-            )
-          : DropdownButtonHideUnderline(
-              child: DropdownButton<LahanModel>(
-                value: _selectedLahan,
-                dropdownColor: Colors.black87,
-                icon: const Icon(Icons.arrow_drop_down, color: Colors.white),
-                isExpanded: true,
-                hint: const Text("Pilih Lahan", style: TextStyle(color: Colors.white70)),
-                items: _lahans.map((lahan) {
-                  return DropdownMenuItem<LahanModel>(
-                    value: lahan,
-                    child: Text(
-                      lahan.name,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-                    ),
-                  );
-                }).toList(),
-                onChanged: (LahanModel? newValue) {
-                  setState(() {
-                    _selectedLahan = newValue;
-                  });
-                },
-              ),
-            ),
-      ),
-    );
-  }
+
 
   Widget _buildCorner({required bool top, required bool left}) {
     return Container(

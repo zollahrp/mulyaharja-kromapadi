@@ -18,14 +18,22 @@ class LahanModel {
   });
 
   factory LahanModel.fromJson(Map<String, dynamic> json) {
+    int? parseToInt(dynamic value) {
+      if (value == null) return null;
+      if (value is int) return value;
+      if (value is num) return value.toInt();
+      if (value is String) return double.tryParse(value)?.toInt();
+      return null;
+    }
+
     return LahanModel(
-      id: json['id'],
-      kelompokTaniId: json['kelompok_tani_id'],
-      name: json['name'],
-      luas: json['luas'],
-      isAktif: json['is_aktif'] ?? false,
-      tanggalTanam: json['tanggal_tanam'],
-      hst: json['hst'],
+      id: parseToInt(json['id']) ?? 0,
+      kelompokTaniId: parseToInt(json['kelompok_tani_id']) ?? 0,
+      name: json['name']?.toString() ?? 'Tanpa Nama',
+      luas: parseToInt(json['luas']),
+      isAktif: json['is_aktif'] == true || json['is_aktif'] == 1 || json['is_aktif'] == '1',
+      tanggalTanam: json['tanggal_tanam']?.toString(),
+      hst: parseToInt(json['hst']),
     );
   }
 }
