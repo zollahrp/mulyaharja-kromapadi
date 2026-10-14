@@ -4,11 +4,12 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 class ApiService {
   static String get baseUrl {
-    String url = dotenv.env['API_BASE_URL'] ?? 'http://10.0.2.2:8000/api';
+    // Pada Chrome (Flutter Web), selalu gunakan 127.0.0.1 agar lancar dan bebas CORS
     if (kIsWeb) {
-      url = url.replaceAll('10.0.2.2', '127.0.0.1');
+      return 'http://127.0.0.1:8000/api';
     }
-    return url;
+    // Pada HP Android (APK / perangkat fisik), gunakan IP Wi-Fi laptop dari .env
+    return dotenv.env['API_BASE_URL'] ?? 'http://192.168.108.17:8000/api';
   }
 
   static Future<Map<String, String>> getHeaders({bool requireAuth = false}) async {
