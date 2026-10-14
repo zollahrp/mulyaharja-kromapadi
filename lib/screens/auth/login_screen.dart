@@ -76,8 +76,31 @@ class _LoginScreenState extends State<LoginScreen> {
                           ],
                         ),
                         
-                        // 2. Teks Selamat Datang (Tengah)
-                        const SizedBox(height: 8),
+                        // 2. Logo Brand & Teks Selamat Datang
+                        Transform.translate(
+                          offset: const Offset(0, -30),
+                          child: Container(
+                            width: 68,
+                            height: 68,
+                            padding: const EdgeInsets.all(11),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.primaryGreen.withOpacity(0.18),
+                                  blurRadius: 16,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                              border: Border.all(color: const Color(0xFFE8F5E9), width: 2.5),
+                            ),
+                            child: Image.asset(
+                              'assets/images/logo-mark.png',
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                        ),
                         const Text(
                           "Selamat Datang",
                           style: TextStyle(

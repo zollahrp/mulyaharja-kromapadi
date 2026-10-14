@@ -51,7 +51,29 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           ),
                         ),
                         
-                        const SizedBox(height: 24),
+                        const SizedBox(height: 12),
+                        Container(
+                          width: 64,
+                          height: 64,
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.primaryGreen.withOpacity(0.12),
+                                blurRadius: 16,
+                                offset: const Offset(0, 4),
+                              ),
+                            ],
+                            border: Border.all(color: const Color(0xFFE8F5E9), width: 2),
+                          ),
+                          child: Image.asset(
+                            'assets/images/logo-mark.png',
+                            fit: BoxFit.contain,
+                          ),
+                        ),
                         const Text(
                           "Daftar",
                           style: TextStyle(

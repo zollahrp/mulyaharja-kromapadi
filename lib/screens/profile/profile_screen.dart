@@ -41,6 +41,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
+  void _showAboutDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return Dialog(
+          backgroundColor: Colors.white,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF9FBE7),
+                    borderRadius: BorderRadius.circular(20),
+                  ),
+                  child: Image.asset(
+                    'assets/images/logo-original.png',
+                    height: 90,
+                    fit: BoxFit.contain,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                const Text(
+                  "PadiNexa",
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w800,
+                    color: AppColors.darkGreen,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  "Versi 1.0.0 (Build 1)",
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  "Aplikasi asisten cerdas agrikultur untuk deteksi dini penyakit, analisis nutrisi daun, dan pemantauan kesehatan padi di KTD Mulyaharja.",
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 13,
+                    height: 1.5,
+                    color: Colors.grey[700],
+                  ),
+                ),
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 46,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primaryGreen,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 0,
+                    ),
+                    child: const Text("Tutup", style: TextStyle(fontWeight: FontWeight.bold)),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
   void _showLogoutDialog() {
     showDialog(
       context: context,
@@ -110,7 +187,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildDivider(),
                       _buildSettingsItem(Icons.help_outline, "Pusat Bantuan", "FAQ dan layanan pelanggan", () => _showComingSoon("Pusat Bantuan")),
                       _buildDivider(),
-                      _buildSettingsItem(Icons.info_outline, "Tentang PadiNexa", "Versi 1.0.0", () => _showComingSoon("Tentang PadiNexa")),
+                      _buildSettingsItem(Icons.info_outline, "Tentang PadiNexa", "Versi 1.0.0", _showAboutDialog),
                     ]),
                     
                     const SizedBox(height: 32),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/app_colors.dart';
 import '../auth/login_screen.dart';
 
@@ -105,25 +106,40 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.start,
                         children: [
-                          const SizedBox(height: 24),
+                          const SizedBox(height: 16),
+                          // Subtle Brand Emblem Accent
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryGreen.withOpacity(0.08),
+                              shape: BoxShape.circle,
+                            ),
+                            child: Image.asset(
+                              'assets/images/logo-mark.png',
+                              height: 28,
+                              width: 28,
+                              fit: BoxFit.contain,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
                           Text(
                             onboardingData[index]["title"]!,
                             textAlign: TextAlign.center,
                             style: const TextStyle(
-                              fontSize: 28,
+                              fontSize: 26,
                               fontWeight: FontWeight.w800,
                               letterSpacing: -0.5,
                               color: AppColors.textDark,
                             ),
                           ),
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
                           Text(
                             onboardingData[index]["description"]!,
                             textAlign: TextAlign.center,
                             style: TextStyle(
-                              fontSize: 15,
+                              fontSize: 14,
                               color: Colors.grey[600],
-                              height: 1.6,
+                              height: 1.5,
                               letterSpacing: 0.2,
                             ),
                           ),
@@ -136,48 +152,89 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             },
           ),
           
-          // 2. Tombol Skip yang Elegan
+          // 2. Top Header Bar (Brand Logo & Tombol Skip)
           SafeArea(
-            child: Align(
-              alignment: Alignment.topRight,
-              child: AnimatedOpacity(
-                // Tombol skip hilang saat di halaman terakhir dengan halus
-                opacity: _currentPage == onboardingData.length - 1 ? 0.0 : 1.0,
-                duration: const Duration(milliseconds: 300),
-                child: Padding(
-                  padding: const EdgeInsets.all(24.0),
-                  child: InkWell(
-                    onTap: () {
-                      _pageController.animateToPage(
-                        onboardingData.length - 1,
-                        duration: const Duration(milliseconds: 600),
-                        curve: Curves.easeInOut,
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(20),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.8), // Kaca transparan (Glassmorphism)
-                        borderRadius: BorderRadius.circular(20),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.black.withOpacity(0.05),
-                            blurRadius: 10,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 12.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  // Logo Brand Badge (Glassmorphism)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.9),
+                      borderRadius: BorderRadius.circular(24),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.06),
+                          blurRadius: 10,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Image.asset(
+                          'assets/images/logo-mark.png',
+                          height: 22,
+                          fit: BoxFit.contain,
+                        ),
+                        const SizedBox(width: 8),
+                        const Text(
+                          "PadiNexa",
+                          style: TextStyle(
+                            color: AppColors.darkGreen,
+                            fontWeight: FontWeight.w800,
+                            fontSize: 14,
+                            letterSpacing: -0.3,
                           ),
-                        ],
-                      ),
-                      child: const Text(
-                        "Lewati",
-                        style: TextStyle(
-                          color: AppColors.textDark, 
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Tombol Skip yang Elegan
+                  AnimatedOpacity(
+                    opacity: _currentPage == onboardingData.length - 1 ? 0.0 : 1.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: InkWell(
+                      onTap: () async {
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('has_seen_onboarding', true);
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          );
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(20),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.85),
+                          borderRadius: BorderRadius.circular(20),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 10,
+                            ),
+                          ],
+                        ),
+                        child: const Text(
+                          "Lewati",
+                          style: TextStyle(
+                            color: AppColors.textDark, 
+                            fontWeight: FontWeight.w700,
+                            fontSize: 14,
+                          ),
                         ),
                       ),
                     ),
                   ),
-                ),
+                ],
               ),
             ),
           ),
@@ -201,12 +258,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   width: double.infinity,
                   height: 56, // Sedikit lebih tinggi biar terkesan Premium
                   child: ElevatedButton(
-                    onPressed: () {
+                    onPressed: () async {
                       if (_currentPage == onboardingData.length - 1) {
-                        Navigator.pushReplacement(
-                          context,
-                          MaterialPageRoute(builder: (context) => const LoginScreen()),
-                        );
+                        final prefs = await SharedPreferences.getInstance();
+                        await prefs.setBool('has_seen_onboarding', true);
+                        if (mounted) {
+                          Navigator.pushReplacement(
+                            context,
+                            MaterialPageRoute(builder: (context) => const LoginScreen()),
+                          );
+                        }
                       } else {
                         _pageController.nextPage(
                           duration: const Duration(milliseconds: 400),
