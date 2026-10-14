@@ -18,7 +18,7 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateMixin {
   CameraController? _cameraController;
   List<CameraDescription>? _cameras;
   bool _isCameraInitialized = false;
@@ -31,10 +31,26 @@ class _ScanScreenState extends State<ScanScreen> {
   LahanModel? _selectedLahan;
   bool _isLoadingLahan = true;
   bool _isCheckingLocation = true;
+  bool _showTips = true;
+
+  late AnimationController _scanAnimationController;
+  late Animation<double> _scanAnimation;
 
   @override
   void initState() {
     super.initState();
+    _scanAnimationController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 2400),
+    )..repeat(reverse: true);
+
+    _scanAnimation = Tween<double>(begin: 0.08, end: 0.92).animate(
+      CurvedAnimation(
+        parent: _scanAnimationController,
+        curve: Curves.easeInOut,
+      ),
+    );
+
     _checkLocationAndInit();
   }
 
@@ -197,6 +213,7 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   void dispose() {
+    _scanAnimationController.dispose();
     _cameraController?.dispose();
     super.dispose();
   }
@@ -300,38 +317,51 @@ class _ScanScreenState extends State<ScanScreen> {
         backgroundColor: Colors.white,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.black),
+          icon: const Icon(Icons.arrow_back, color: Colors.black87),
           onPressed: () => Navigator.pop(context),
         ),
         title: const Text(
           "Scan Daun Padi",
-          style: TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 18),
+          style: TextStyle(color: Colors.black87, fontWeight: FontWeight.bold, fontSize: 18),
         ),
         centerTitle: true,
         actions: [
           IconButton(
-            icon: const Icon(Icons.help_outline, color: Colors.black),
-            onPressed: () {},
+            icon: Icon(
+              _isFlashOn ? Icons.flash_on : Icons.flash_off,
+              color: _isFlashOn ? Colors.amber[700] : Colors.black87,
+            ),
+            tooltip: "Flash",
+            onPressed: _toggleFlash,
+          ),
+          IconButton(
+            icon: const Icon(Icons.help_outline, color: Colors.black87),
+            tooltip: "Panduan",
+            onPressed: _showGuideModal,
           ),
         ],
       ),
-      body: Column(
-        children: [
-          _buildStepIndicator(),
-          const SizedBox(height: 10),
-          _buildLahanSelector(),
-          const SizedBox(height: 10),
-          Expanded(
-            child: Stack(
-              children: [
-                _buildCameraPreview(),
-                _buildCameraOverlay(),
-                _buildCameraControls(),
-              ],
+      body: SafeArea(
+        top: false,
+        child: Column(
+          children: [
+            const SizedBox(height: 2),
+            _buildStepIndicator(),
+            const SizedBox(height: 6),
+            _buildLahanSelector(),
+            const SizedBox(height: 6),
+            Expanded(
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildCameraPreview(),
+                  _buildCameraOverlay(),
+                ],
+              ),
             ),
-          ),
-          _buildBottomPanel(),
-        ],
+            _buildBottomPanel(),
+          ],
+        ),
       ),
     );
   }
@@ -535,242 +565,377 @@ class _ScanScreenState extends State<ScanScreen> {
     );
   }
 
-  Widget _buildCameraOverlay() {
-    return Positioned.fill(
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.black.withOpacity(0.6),
-                borderRadius: BorderRadius.circular(20),
+  void _showGuideModal() {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return Padding(
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey[300],
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
               ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
+              const SizedBox(height: 16),
+              const Row(
                 children: [
-                  Icon(Icons.lightbulb_outline, color: Colors.white, size: 16),
+                  Icon(Icons.help_outline, color: AppColors.primaryGreen, size: 22),
                   SizedBox(width: 8),
                   Text(
-                    "Pastikan daun padi berada\ndalam area kotak",
-                    style: TextStyle(color: Colors.white, fontSize: 12),
+                    "Panduan Pemindaian Daun",
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textDark,
+                    ),
                   ),
                 ],
               ),
-            ),
-            const SizedBox(height: 40),
-            Container(
-              width: 250,
-              height: 350,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white.withOpacity(0.5), width: 2),
-                borderRadius: BorderRadius.circular(16),
+              const SizedBox(height: 16),
+              _buildGuideItem(
+                Icons.center_focus_strong,
+                "Fokus pada 1 Helai Daun",
+                "Posisikan satu helai daun padi utama tepat di dalam kotak panduan.",
               ),
-              child: Stack(
-                children: [
-                  Positioned(top: 0, left: 0, child: _buildCorner(top: true, left: true)),
-                  Positioned(top: 0, right: 0, child: _buildCorner(top: true, left: false)),
-                  Positioned(bottom: 0, left: 0, child: _buildCorner(top: false, left: true)),
-                  Positioned(bottom: 0, right: 0, child: _buildCorner(top: false, left: false)),
-                ],
+              const SizedBox(height: 12),
+              _buildGuideItem(
+                Icons.wb_sunny_outlined,
+                "Pencahayaan Optimal",
+                "Hindari bayangan tebal atau backlight. Gunakan tombol flash jika kondisi redup.",
+              ),
+              const SizedBox(height: 12),
+              _buildGuideItem(
+                Icons.straighten,
+                "Jarak Ideal 15 - 25 cm",
+                "Pegang ponsel secara stabil agar bercak daun tidak buram atau blur.",
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                height: 46,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 0,
+                  ),
+                  child: const Text("Mengerti, Lanjutkan", style: TextStyle(fontWeight: FontWeight.bold)),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildGuideItem(IconData icon, String title, String description) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(8),
+          decoration: BoxDecoration(
+            color: AppColors.primaryGreen.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Icon(icon, color: AppColors.primaryGreen, size: 18),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.textDark),
+              ),
+              const SizedBox(height: 2),
+              Text(
+                description,
+                style: TextStyle(color: Colors.grey[600], fontSize: 12, height: 1.4),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCameraOverlay() {
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final double maxH = constraints.maxHeight;
+        final double maxW = constraints.maxWidth;
+
+        // Dimensi kotak pemindaian proporsional dan responsif secara dinamis
+        final double boxWidth = (maxW * 0.72).clamp(160.0, 260.0);
+        final double boxHeight = (maxH * 0.58).clamp(140.0, 310.0);
+
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            // Area instruksi teks pill mengambang di atas reticle
+            Positioned(
+              top: (maxH / 2 - boxHeight / 2 - 42).clamp(10.0, maxH),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.65),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.center_focus_strong, color: Colors.greenAccent, size: 14),
+                    SizedBox(width: 6),
+                    Text(
+                      "Posisikan daun di dalam kotak",
+                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            // Kotak Pemindaian dengan Garis Laser Animasi
+            Center(
+              child: Container(
+                width: boxWidth,
+                height: boxHeight,
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.white.withOpacity(0.35), width: 1.5),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Stack(
+                  children: [
+                    // Corner Brackets
+                    Positioned(top: 0, left: 0, child: _buildCorner(top: true, left: true)),
+                    Positioned(top: 0, right: 0, child: _buildCorner(top: true, left: false)),
+                    Positioned(bottom: 0, left: 0, child: _buildCorner(top: false, left: true)),
+                    Positioned(bottom: 0, right: 0, child: _buildCorner(top: false, left: false)),
+
+                    // Laser Scan Line Animasi Vertikal
+                    AnimatedBuilder(
+                      animation: _scanAnimation,
+                      builder: (context, child) {
+                        return Positioned(
+                          top: boxHeight * _scanAnimation.value,
+                          left: 6,
+                          right: 6,
+                          child: Container(
+                            height: 2,
+                            decoration: BoxDecoration(
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Colors.transparent,
+                                  AppColors.primaryGreen,
+                                  Colors.greenAccent,
+                                  AppColors.primaryGreen,
+                                  Colors.transparent,
+                                ],
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.greenAccent.withOpacity(0.7),
+                                  blurRadius: 6,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
               ),
             ),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
-
-
 
   Widget _buildCorner({required bool top, required bool left}) {
     return Container(
-      width: 24,
-      height: 24,
+      width: 22,
+      height: 22,
       decoration: BoxDecoration(
         border: Border(
-          top: top ? const BorderSide(color: Colors.white, width: 4) : BorderSide.none,
-          bottom: !top ? const BorderSide(color: Colors.white, width: 4) : BorderSide.none,
-          left: left ? const BorderSide(color: Colors.white, width: 4) : BorderSide.none,
-          right: !left ? const BorderSide(color: Colors.white, width: 4) : BorderSide.none,
+          top: top ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
+          bottom: !top ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
+          left: left ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
+          right: !left ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
         ),
-      ),
-    );
-  }
-
-  Widget _buildCameraControls() {
-    return Positioned(
-      left: 32,
-      top: 100,
-      child: Column(
-        children: [
-          _buildControlButton(
-            icon: _isFlashOn ? Icons.flash_on : Icons.flash_off,
-            label: "Flash",
-            onTap: _toggleFlash,
-          ),
-          const SizedBox(height: 20),
-          _buildControlButton(
-            icon: Icons.photo_library,
-            label: "Galeri",
-            onTap: _pickFromGallery,
-          ),
-          const SizedBox(height: 20),
-          _buildControlButton(
-            icon: Icons.help_outline,
-            label: "Panduan",
-            onTap: () {},
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildControlButton({required IconData icon, required String label, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.black.withOpacity(0.5),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: Colors.white, size: 24),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            label,
-            style: const TextStyle(color: Colors.white, fontSize: 12),
-          ),
-        ],
       ),
     );
   }
 
   Widget _buildBottomPanel() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(24, 16, 24, 32),
-      decoration: const BoxDecoration(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 14),
+      decoration: BoxDecoration(
         color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.04),
+            blurRadius: 8,
+            offset: const Offset(0, -3),
+          ),
+        ],
       ),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: const Color(0xFFF0FDF4),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: const Color(0xFFDCFCE7)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFDCFCE7),
-                    shape: BoxShape.circle,
+          // Banner Tips Ringkas & Dismissible
+          if (_showTips) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: const Color(0xFFF0FDF4),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: const Color(0xFFDCFCE7)),
+              ),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(5),
+                    decoration: const BoxDecoration(
+                      color: Color(0xFFDCFCE7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(Icons.eco, color: AppColors.primaryGreen, size: 14),
                   ),
-                  child: const Icon(Icons.eco, color: AppColors.primaryGreen, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        "Tips Pengambilan Gambar",
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.primaryGreen, fontSize: 13),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        "Ambil gambar daun yang jelas, fokus, dan pastikan cahaya cukup agar hasil analisis lebih akurat.",
-                        style: TextStyle(color: Colors.grey[700], fontSize: 12),
-                      ),
-                    ],
+                  const SizedBox(width: 10),
+                  const Expanded(
+                    child: Text(
+                      "Pastikan cahaya cukup dan daun padi fokus tajam.",
+                      style: TextStyle(color: Color(0xFF1B5E20), fontSize: 11, fontWeight: FontWeight.w600),
+                    ),
                   ),
-                ),
-                const Icon(Icons.close, color: Colors.black54, size: 18),
-              ],
+                  InkWell(
+                    onTap: () {
+                      setState(() {
+                        _showTips = false;
+                      });
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: const Padding(
+                      padding: EdgeInsets.all(4),
+                      child: Icon(Icons.close, color: Colors.grey, size: 16),
+                    ),
+                  ),
+                ],
+              ),
             ),
-          ),
-          const SizedBox(height: 24),
+          ],
+
+          // Baris Kontrol Kamera Ergonomis
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+            crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              GestureDetector(
-                onTap: _switchCamera,
-                child: Column(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.grey[50],
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.flip_camera_ios, color: Colors.black87),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text("Ganti Kamera", style: TextStyle(fontSize: 12, color: Colors.black87)),
-                  ],
-                ),
+              // Tombol Pilih dari Galeri
+              _buildBottomActionButton(
+                icon: Icons.photo_library_outlined,
+                label: "Galeri",
+                onTap: _pickFromGallery,
               ),
+
+              // Tombol Shutter Utama dengan Haptic Ring
               GestureDetector(
                 onTap: _takePicture,
                 child: Container(
-                  width: 80,
-                  height: 80,
+                  width: 72,
+                  height: 72,
+                  padding: const EdgeInsets.all(4),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    border: Border.all(color: AppColors.primaryGreen, width: 4),
+                    border: Border.all(color: AppColors.primaryGreen, width: 3.5),
                   ),
                   child: Container(
-                    margin: const EdgeInsets.all(4),
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: AppColors.primaryGreen,
                       shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: AppColors.primaryGreen.withOpacity(0.35),
+                          blurRadius: 10,
+                          offset: const Offset(0, 3),
+                        ),
+                      ],
                     ),
-                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 32),
+                    child: const Icon(Icons.camera_alt, color: Colors.white, size: 28),
                   ),
                 ),
               ),
-              Column(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[50],
-                      shape: BoxShape.circle,
-                    ),
-                    child: const Icon(Icons.document_scanner, color: Colors.black87),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      const Text("Auto Capture", style: TextStyle(fontSize: 12, color: Colors.black87)),
-                      const SizedBox(width: 4),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: AppColors.primaryGreen,
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: const Text("ON", style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
-                      )
-                    ],
-                  ),
-                ],
+
+              // Tombol Ganti / Flip Kamera
+              _buildBottomActionButton(
+                icon: Icons.flip_camera_ios_outlined,
+                label: "Putar",
+                onTap: _switchCamera,
               ),
             ],
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildBottomActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(30),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                shape: BoxShape.circle,
+                border: Border.all(color: Colors.grey[200]!),
+              ),
+              child: Icon(icon, color: AppColors.textDark, size: 22),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey[700],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
