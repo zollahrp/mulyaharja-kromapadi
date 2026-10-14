@@ -5,7 +5,7 @@
     <uses-feature android:name="android.hardware.camera" />
     <uses-feature android:name="android.hardware.camera.autofocus" />
     <application
-        android:label="mulyaharja_kromapadi"
+        android:label="PadiNexa"
         android:name="${applicationName}"
         android:icon="@mipmap/ic_launcher">
         <activity

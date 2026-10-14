@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../utils/app_colors.dart';
+import '../../models/lahan_model.dart';
+import '../../services/lahan_service.dart';
+import '../../services/api_service.dart';
 
 class LahanScreen extends StatefulWidget {
   const LahanScreen({super.key});
@@ -9,16 +12,18 @@ class LahanScreen extends StatefulWidget {
 }
 
 class _LahanScreenState extends State<LahanScreen> {
-  void _showComingSoon(String featureName) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('$featureName masih dalam tahap pengembangan.', style: const TextStyle(fontWeight: FontWeight.w600)),
-        behavior: SnackBarBehavior.floating,
-        backgroundColor: AppColors.primaryGreen,
-        duration: const Duration(seconds: 2),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-      ),
-    );
+  late Future<List<LahanModel>> _lahanFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _lahanFuture = LahanService().getLahan();
+  }
+
+  Future<void> _refreshData() async {
+    setState(() {
+      _lahanFuture = LahanService().getLahan();
+    });
   }
 
   @override
@@ -26,23 +31,64 @@ class _LahanScreenState extends State<LahanScreen> {
     return Scaffold(
       backgroundColor: AppColors.bgOffWhite,
       body: SafeArea(
-        child: Column(
-          children: [
-            _buildHeader(),
-            Expanded(
-              child: SingleChildScrollView(
-                physics: const BouncingScrollPhysics(),
-                child: Column(
-                  children: [
-                    _buildSummaryWidgets(),
-                    const SizedBox(height: 24),
-                    _buildLahanList(),
-                    const SizedBox(height: 100), // Padding for bottom nav
-                  ],
+        child: RefreshIndicator(
+          onRefresh: _refreshData,
+          color: AppColors.primaryGreen,
+          child: Column(
+            children: [
+              _buildHeader(),
+              Expanded(
+                child: FutureBuilder<List<LahanModel>>(
+                  future: _lahanFuture,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(
+                        child: CircularProgressIndicator(color: AppColors.primaryGreen),
+                      );
+                    } else if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          "Gagal memuat lahan:\n${snapshot.error}",
+                          textAlign: TextAlign.center,
+                          style: const TextStyle(color: Colors.red),
+                        ),
+                      );
+                    } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return ListView(
+                        children: [
+                          _buildSummaryWidgets(0, 0),
+                          const SizedBox(height: 100),
+                          const Center(
+                            child: Text(
+                              "Belum ada data lahan.",
+                              style: TextStyle(color: Colors.grey, fontSize: 16),
+                            ),
+                          ),
+                        ],
+                      );
+                    }
+
+                    final lahanList = snapshot.data!;
+                    int totalLahan = lahanList.length;
+                    double totalLuas = lahanList.fold(0, (sum, item) => sum + (item.luas ?? 0));
+                    double totalLuasHa = totalLuas / 10000;
+
+                    return SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
+                      child: Column(
+                        children: [
+                          _buildSummaryWidgets(totalLahan, totalLuasHa),
+                          const SizedBox(height: 24),
+                          _buildLahanList(lahanList),
+                          const SizedBox(height: 100), // Padding for bottom nav
+                        ],
+                      ),
+                    );
+                  },
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -75,43 +121,12 @@ class _LahanScreenState extends State<LahanScreen> {
               ),
             ],
           ),
-          InkWell(
-            onTap: () => _showComingSoon('Tambah Lahan Baru'),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.primaryGreen,
-                borderRadius: BorderRadius.circular(12),
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.primaryGreen.withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 4),
-                  ),
-                ],
-              ),
-              child: const Row(
-                children: [
-                  Icon(Icons.add, color: Colors.white, size: 18),
-                  SizedBox(width: 4),
-                  Text(
-                    "Tambah",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
         ],
       ),
     );
   }
 
-  Widget _buildSummaryWidgets() {
+  Widget _buildSummaryWidgets(int totalLahan, double totalLuasHa) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Row(
@@ -119,7 +134,7 @@ class _LahanScreenState extends State<LahanScreen> {
           Expanded(
             child: _buildStatCard(
               title: "Total Lahan",
-              value: "3",
+              value: "$totalLahan",
               subtitle: "Petak Sawah",
               icon: Icons.landscape,
               color: Colors.blue,
@@ -129,7 +144,7 @@ class _LahanScreenState extends State<LahanScreen> {
           Expanded(
             child: _buildStatCard(
               title: "Total Luas",
-              value: "4.5",
+              value: totalLuasHa.toStringAsFixed(2),
               subtitle: "Hektar",
               icon: Icons.square_foot,
               color: Colors.orange,
@@ -203,50 +218,53 @@ class _LahanScreenState extends State<LahanScreen> {
     );
   }
 
-  Widget _buildLahanList() {
+  String _getFullImageUrl(String? path) {
+    if (path == null || path.isEmpty) return '';
+    if (path.startsWith('http')) return path;
+    return '${ApiService.baseUrl}/storage/$path';
+  }
+
+  Widget _buildLahanList(List<LahanModel> lahanList) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Column(
-        children: [
-          _buildLahanCard(
-            name: "Sawah Blok A-1",
-            location: "Mulyaharja, Bogor Selatan",
-            area: "1.5 Ha",
-            variety: "Inpari 32",
-            age: "45 HST",
-            status: "Kondisi Prima",
-            statusColor: AppColors.healthyGreenTag,
-            statusTextColor: AppColors.healthyGreenText,
-            imageUrl: "https://images.unsplash.com/photo-1599940824399-b87987ceb72a?q=80&w=600&auto=format&fit=crop",
-            progress: 0.45,
-          ),
-          const SizedBox(height: 16),
-          _buildLahanCard(
-            name: "Sawah Blok B-2",
-            location: "Mulyaharja, Bogor Selatan",
-            area: "2.0 Ha",
-            variety: "Mekongga",
-            age: "30 HST",
-            status: "Perlu Pupuk",
-            statusColor: AppColors.warningOrangeTag,
-            statusTextColor: AppColors.warningOrangeText,
-            imageUrl: "https://images.unsplash.com/photo-1586771107445-d3af9e15fa57?q=80&w=600&auto=format&fit=crop",
-            progress: 0.30,
-          ),
-          const SizedBox(height: 16),
-          _buildLahanCard(
-            name: "Sawah Blok C-3",
-            location: "Mulyaharja, Bogor Selatan",
-            area: "1.0 Ha",
-            variety: "Ciherang",
-            age: "80 HST",
-            status: "Masa Panen",
-            statusColor: Colors.blue[50]!,
-            statusTextColor: Colors.blue[700]!,
-            imageUrl: "https://images.unsplash.com/photo-1629737966373-fb94e1e127de?q=80&w=600&auto=format&fit=crop",
-            progress: 0.85,
-          ),
-        ],
+        children: lahanList.map((lahan) {
+          double luasHa = (lahan.luas ?? 0) / 10000;
+          
+          String statusText = lahan.isAktif ? "Kondisi Prima" : "Tidak Aktif";
+          Color tagColor = lahan.isAktif ? AppColors.healthyGreenTag : Colors.grey[200]!;
+          Color tagTextColor = lahan.isAktif ? AppColors.healthyGreenText : Colors.grey[700]!;
+          
+          if (lahan.isAktif && (lahan.hst ?? 0) > 90) {
+            statusText = "Masa Panen";
+            tagColor = Colors.blue[50]!;
+            tagTextColor = Colors.blue[700]!;
+          }
+          
+          double progress = 0.0;
+          if (lahan.hst != null) {
+            progress = lahan.hst! / 110; // Assuming 110 days is full cycle
+            if (progress > 1.0) progress = 1.0;
+          }
+
+          return Column(
+            children: [
+              _buildLahanCard(
+                name: lahan.name,
+                location: "Mulyaharja, Bogor Selatan",
+                area: "${luasHa.toStringAsFixed(2)} Ha",
+                variety: "-", // Variety not available in model
+                age: lahan.hst != null ? "${lahan.hst} HST" : "-",
+                status: statusText,
+                statusColor: tagColor,
+                statusTextColor: tagTextColor,
+                imageUrl: _getFullImageUrl(lahan.fotoPath),
+                progress: progress,
+              ),
+              const SizedBox(height: 16),
+            ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -383,20 +401,15 @@ class _LahanScreenState extends State<LahanScreen> {
             children: [
               ClipRRect(
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
-                child: Image.network(
-                  imageUrl,
-                  height: 140,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return Container(
-                      height: 140,
-                      width: double.infinity,
-                      color: Colors.grey[300],
-                      child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                    );
-                  },
-                ),
+                child: imageUrl.isNotEmpty
+                    ? Image.network(
+                        imageUrl,
+                        height: 140,
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (context, error, stackTrace) => _buildLahanPlaceholder(),
+                      )
+                    : _buildLahanPlaceholder(),
               ),
               Positioned(
                 top: 12,
@@ -553,4 +566,36 @@ class _LahanScreenState extends State<LahanScreen> {
       margin: const EdgeInsets.symmetric(horizontal: 12),
     );
   }
+
+  Widget _buildLahanPlaceholder() {
+    return Container(
+      height: 140,
+      width: double.infinity,
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [Color(0xFFE8F5E9), Color(0xFFC8E6C9)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+      ),
+      child: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(Icons.landscape_rounded, color: AppColors.primaryGreen.withOpacity(0.7), size: 44),
+            const SizedBox(height: 6),
+            Text(
+              "Lahan Padi Terdaftar",
+              style: TextStyle(
+                color: AppColors.primaryGreen.withOpacity(0.85),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
+

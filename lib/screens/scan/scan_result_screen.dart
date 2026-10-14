@@ -10,6 +10,7 @@ import '../../utils/app_colors.dart';
 import '../../services/gemini_service.dart';
 import '../../services/scan_history_service.dart';
 import '../../services/weather_service.dart';
+import '../main_navigation.dart';
 
 class ScanResultScreen extends StatefulWidget {
   final XFile imageFile;
@@ -167,6 +168,12 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   }
 
   Widget _buildErrorView() {
+    final isInvalidLeaf = _errorMessage != null &&
+        (_errorMessage!.toLowerCase().contains('bukan daun') ||
+            _errorMessage!.toLowerCase().contains('kertas') ||
+            _errorMessage!.toLowerCase().contains('hewan') ||
+            _errorMessage!.toLowerCase().contains('tanaman non-padi'));
+
     return SafeArea(
       child: Center(
         child: Padding(
@@ -175,30 +182,33 @@ class _ScanResultScreenState extends State<ScanResultScreen>
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
-                width: 88,
-                height: 88,
+                width: 92,
+                height: 92,
                 decoration: BoxDecoration(
-                  color: const Color(0xFFFEF2F2),
+                  color: isInvalidLeaf ? const Color(0xFFFFFBEB) : const Color(0xFFFEF2F2),
                   shape: BoxShape.circle,
-                  border: Border.all(color: const Color(0xFFFEE2E2), width: 2),
+                  border: Border.all(
+                    color: isInvalidLeaf ? const Color(0xFFFDE68A) : const Color(0xFFFEE2E2),
+                    width: 2,
+                  ),
                 ),
-                child: const Icon(
-                  Icons.sync_problem_rounded,
-                  color: Color(0xFFEF4444),
-                  size: 40,
+                child: Icon(
+                  isInvalidLeaf ? Icons.hide_image_outlined : Icons.sync_problem_rounded,
+                  color: isInvalidLeaf ? const Color(0xFFD97706) : const Color(0xFFEF4444),
+                  size: 42,
                 ),
               ),
               const SizedBox(height: 24),
-              const Text(
-                "Gagal Menganalisis",
-                style: TextStyle(
+              Text(
+                isInvalidLeaf ? "Objek Bukan Daun Padi" : "Gagal Menganalisis",
+                style: const TextStyle(
                   fontSize: 22,
                   fontWeight: FontWeight.w800,
                   color: Color(0xFF0F172A),
                   letterSpacing: -0.4,
                 ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 10),
               Text(
                 _errorMessage ?? "Terjadi kendala saat memproses sampel daun.",
                 textAlign: TextAlign.center,
@@ -213,6 +223,27 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                 width: double.infinity,
                 child: FilledButton.icon(
                   onPressed: () {
+                    Navigator.pop(context);
+                  },
+                  icon: const Icon(Icons.camera_alt_outlined, size: 20),
+                  label: const Text(
+                    "Ambil Foto Ulang",
+                    style: TextStyle(fontWeight: FontWeight.w700),
+                  ),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: () {
                     HapticFeedback.lightImpact();
                     setState(() {
                       _isLoading = true;
@@ -220,14 +251,14 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                     });
                     _analyzeImage();
                   },
-                  icon: const Icon(Icons.refresh_rounded, size: 20),
+                  icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFF64748B)),
                   label: const Text(
-                    "Ulangi Pemindaian",
-                    style: TextStyle(fontWeight: FontWeight.w700),
+                    "Coba Analisis Lagi",
+                    style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF475569)),
                   ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primaryGreen,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                  style: OutlinedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    side: BorderSide(color: Colors.grey[300]!),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(16),
                     ),
@@ -553,7 +584,7 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           Expanded(
             child: _EnvironmentMiniItem(
               label: "Suhu",
-              value: _temp != null ? "${_temp!.toStringAsFixed(1)}°C" : "--",
+              value: _temp != null ? "${_temp!.toStringAsFixed(1)}Â°C" : "--",
               icon: Icons.device_thermostat_rounded,
               badgeColor: const Color(0xFFEA580C),
             ),
@@ -898,6 +929,8 @@ class _ScanResultScreenState extends State<ScanResultScreen>
       await _scanHistoryService.submitScan(
         lahanId: widget.lahanId,
         penyakit: _analysisResult?['disease_symptoms'] ?? 'Normal',
+        bwdValue: double.tryParse(_analysisResult?['bwd_value']?.toString().replaceAll(',', '.') ?? '0'),
+        bwdStatus: _analysisResult?['bwd_status'],
         akurasi: double.tryParse(_analysisResult?['confidence']?.toString() ?? '0'),
         tindakan: _analysisResult?['recommendation'],
         imageFile: widget.imageFile,
@@ -919,7 +952,11 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           ),
         ),
       );
-      Navigator.pop(context);
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(builder: (context) => const MainNavigation(initialIndex: 1)),
+        (route) => false,
+      );
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(

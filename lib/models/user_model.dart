@@ -33,4 +33,16 @@ class UserModel {
       wilayah: json['wilayah'] != null ? WilayahModel.fromJson(json['wilayah']) : null,
     );
   }
+
+  String get roleDisplay {
+    final r = role.toLowerCase();
+    if (r == 'penyuluh' || r == 'penyuluhi' || r == 'master_wilayah') {
+      return 'Penyuluh Pertanian';
+    } else if (r == 'ketua_kelompok') {
+      return 'Ketua Kelompok Tani';
+    } else if (r == 'admin' || r == 'super_admin') {
+      return 'Administrator';
+    }
+    return 'Anggota Kelompok Tani';
+  }
 }

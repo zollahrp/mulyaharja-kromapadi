@@ -1,4 +1,4 @@
-name: mulyaharja_kromapadi
+name: mulyaharja_padinexa
 description: "A new Flutter project."
 # The following line prevents the package from being accidentally published to
 # pub.dev using `flutter pub publish`. This is preferred for private packages.
@@ -45,6 +45,10 @@ dependencies:
   geolocator: ^14.0.3
   geocoding: ^5.0.0
   light: ^5.0.0
+  csv: ^8.0.0
+  file_saver: ^0.4.0
+  pdf: ^3.13.1
+  printing: ^5.15.1
 dev_dependencies:
   flutter_test:
     sdk: flutter

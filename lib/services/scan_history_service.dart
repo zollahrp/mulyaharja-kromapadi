@@ -24,6 +24,8 @@ class ScanHistoryService {
   Future<RiwayatScanModel> submitScan({
     required int lahanId,
     required String penyakit,
+    double? bwdValue,
+    String? bwdStatus,
     double? akurasi,
     String? tindakan,
     XFile? imageFile,
@@ -36,6 +38,12 @@ class ScanHistoryService {
 
     request.fields['lahan_id'] = lahanId.toString();
     request.fields['penyakit'] = penyakit;
+    if (bwdValue != null) {
+      request.fields['bwd_value'] = bwdValue.toString();
+    }
+    if (bwdStatus != null) {
+      request.fields['bwd_status'] = bwdStatus;
+    }
     
     if (akurasi != null) {
       request.fields['akurasi'] = akurasi.toString();
@@ -64,3 +72,4 @@ class ScanHistoryService {
     }
   }
 }
+

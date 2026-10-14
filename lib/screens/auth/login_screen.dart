@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:mulyaharja_kromapadi/screens/auth/register_screen.dart';
-import 'package:mulyaharja_kromapadi/screens/main_navigation.dart';
-import 'package:mulyaharja_kromapadi/services/auth_service.dart';
+import 'package:mulyaharja_padinexa/screens/auth/register_screen.dart';
+import 'package:mulyaharja_padinexa/screens/main_navigation.dart';
+import 'package:mulyaharja_padinexa/services/auth_service.dart';
 import '../../utils/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {

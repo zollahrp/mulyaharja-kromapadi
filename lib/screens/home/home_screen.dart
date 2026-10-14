@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../../utils/app_colors.dart';
 import '../scan/scan_screen.dart';
-import 'package:intl/intl.dart';
+import '../history/history_screen.dart';
+import '../../services/api_service.dart';
 import '../../models/user_model.dart';
 import '../../models/riwayat_scan_model.dart';
 import '../../services/auth_service.dart';
@@ -236,7 +237,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _user?.role == 'ketua_kelompok' ? "Ketua Kelompok Tani" : "Anggota Kelompok Tani",
+                          _user?.roleDisplay ?? "Anggota Kelompok Tani",
                           style: const TextStyle(
                             fontSize: 14,
                             color: Color(0xFF7A7E86),
@@ -245,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                         const SizedBox(height: 2),
                         Text(
-                          _user?.kelompokTaniName ?? 'KTD Karet Tengsin',
+                          _user?.kelompokTaniName ?? (_user?.wilayah?.name != null ? "Wilayah ${_user!.wilayah!.name}" : 'KTD Karet Tengsin'),
                           style: const TextStyle(
                             fontSize: 14,
                             color: AppColors.primaryGreen,
@@ -526,12 +527,23 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  String _getFullImageUrl(String? path) {
+    if (path == null || path.isEmpty || path.contains('unsplash.com')) return '';
+    if (path.startsWith('http')) return path;
+    return '${ApiService.baseUrl}/storage/$path';
+  }
+
   Widget _buildRecentScans() {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20.0),
       child: Column(
         children: [
-          _buildSectionHeader("Riwayat Scan Terbaru", () => _showComingSoon('Semua Riwayat Scan')),
+          _buildSectionHeader("Riwayat Scan Terbaru", () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (context) => const HistoryScreen()),
+            );
+          }),
           const SizedBox(height: 16),
           Container(
             decoration: BoxDecoration(
@@ -569,23 +581,16 @@ class _HomeScreenState extends State<HomeScreen> {
                     Color tagColor = isNormal ? AppColors.healthyGreenTag : AppColors.alertRedTag;
                     Color tagTextColor = isNormal ? AppColors.healthyGreenText : AppColors.alertRedText;
                     
-                    String formattedDate = "-";
-                    if (item.createdAt != null) {
-                       try {
-                          final dt = DateTime.parse(item.createdAt ?? '').toLocal();
-                          formattedDate = DateFormat('dd MMM yyyy • HH:mm').format(dt);
-                       } catch (e) {}
-                    }
+                    String formattedDate = item.humanRelativeTime;
 
                     return Column(
                       children: [
                         _buildScanItem(
-                          item.lahan?.name ?? "Lahan",
+                          item,
                           formattedDate,
-                          item.penyakit ?? "-",
+                          isNormal,
                           tagColor,
                           tagTextColor,
-                          item.fotoPath ?? '',
                         ),
                         if (idx < _recentScans.length - 1) _buildDivider(),
                       ],
@@ -605,12 +610,21 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildScanItem(String title, String date, String status, Color tagColor,
-      Color textColor, String imageUrl) {
+  Widget _buildScanItem(
+    RiwayatScanModel item,
+    String formattedDate,
+    bool isNormal,
+    Color tagColor,
+    Color tagTextColor,
+  ) {
+    final title = item.lahan?.name ?? "Lahan";
+    final imageUrl = _getFullImageUrl(item.fotoPath);
+
     return InkWell(
       onTap: () {
         showModalBottomSheet(
           context: context,
+          isScrollControlled: true,
           shape: const RoundedRectangleBorder(
             borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
           ),
@@ -619,54 +633,148 @@ class _HomeScreenState extends State<HomeScreen> {
               padding: const EdgeInsets.all(24),
               child: Column(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(16),
-                    child: Image.network(
-                      imageUrl,
-                      width: double.infinity,
-                      height: 200,
-                      fit: BoxFit.cover,
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        height: 200,
-                        color: Colors.grey[200],
-                        child: const Icon(Icons.image_not_supported, size: 50, color: Colors.grey),
+                  Center(
+                    child: Container(
+                      width: 40,
+                      height: 4,
+                      margin: const EdgeInsets.only(bottom: 16),
+                      decoration: BoxDecoration(
+                        color: Colors.grey[300],
+                        borderRadius: BorderRadius.circular(2),
                       ),
                     ),
+                  ),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(16),
+                    child: imageUrl.isNotEmpty
+                        ? Image.network(
+                            imageUrl,
+                            width: double.infinity,
+                            height: 200,
+                            fit: BoxFit.cover,
+                            errorBuilder: (context, error, stackTrace) => Container(
+                              height: 200,
+                              color: const Color(0xFFF1F8F5),
+                              child: const Icon(Icons.eco_rounded, size: 50, color: AppColors.primaryGreen),
+                            ),
+                          )
+                        : Container(
+                            height: 200,
+                            width: double.infinity,
+                            color: const Color(0xFFF1F8F5),
+                            child: const Icon(Icons.eco_rounded, size: 50, color: AppColors.primaryGreen),
+                          ),
                   ),
                   const SizedBox(height: 16),
                   Text(
                     title,
                     style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: AppColors.textBlack),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
                   Text(
-                    date,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
+                    formattedDate,
+                    style: TextStyle(color: Colors.grey[600], fontSize: 13),
                   ),
                   const SizedBox(height: 16),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(
-                      color: tagColor,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      status,
-                      style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.bold),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFFE8F5E9),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: const Color(0xFFA5D6A7)),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                "Skala BWD",
+                                style: TextStyle(fontSize: 11, color: Color(0xFF2E7D32), fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                "Skala ${item.bwdValue ?? '-'} (${item.bwdStatus ?? 'Normal'})",
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF1B5E20),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: tagColor,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                "Diagnosa Penyakit",
+                                style: TextStyle(fontSize: 11, color: tagTextColor.withOpacity(0.8), fontWeight: FontWeight.w500),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                item.penyakit ?? "-",
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: tagTextColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 24),
+                  if (item.tindakan != null && item.tindakan!.isNotEmpty) ...[
+                    const SizedBox(height: 14),
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF9FAFB),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFE5E7EB)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            "Rekomendasi Tindakan:",
+                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textBlack),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            item.tindakan!,
+                            style: const TextStyle(fontSize: 12, color: Color(0xFF4B5563), height: 1.4),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 20),
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () => Navigator.pop(context),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryGreen,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        padding: const EdgeInsets.symmetric(vertical: 14),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       ),
-                      child: const Text('Tutup', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
+                      child: const Text('Tutup', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15)),
                     ),
                   ),
                 ],
@@ -681,51 +789,94 @@ class _HomeScreenState extends State<HomeScreen> {
           children: [
             ClipRRect(
               borderRadius: BorderRadius.circular(10),
-              child: Image.network(
-                imageUrl,
-                width: 55,
-                height: 55,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 55,
-                    height: 55,
-                    color: Colors.grey[200],
-                    child: const Icon(Icons.image_not_supported, color: Colors.grey),
-                  );
-                },
-              ),
+              child: imageUrl.isNotEmpty
+                  ? Image.network(
+                      imageUrl,
+                      width: 55,
+                      height: 55,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) {
+                        return Container(
+                          width: 55,
+                          height: 55,
+                          color: const Color(0xFFF1F8F5),
+                          child: const Icon(Icons.eco_rounded, color: AppColors.primaryGreen, size: 28),
+                        );
+                      },
+                    )
+                  : Container(
+                      width: 55,
+                      height: 55,
+                      color: const Color(0xFFF1F8F5),
+                      child: const Icon(Icons.eco_rounded, color: AppColors.primaryGreen, size: 28),
+                    ),
             ),
             const SizedBox(width: 14),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                          color: AppColors.textBlack)),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: AppColors.textBlack,
+                    ),
+                  ),
                   const SizedBox(height: 4),
-                  Text(date,
-                      style:
-                          TextStyle(color: Colors.grey[500], fontSize: 12)),
+                  Text(
+                    formattedDate,
+                    style: TextStyle(color: Colors.grey[500], fontSize: 12),
+                  ),
                 ],
               ),
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: tagColor,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Text(
-                status,
-                style: TextStyle(
-                    color: textColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold),
-              ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (item.bwdValue != null) ...[
+                  Container(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFFE8F5E9),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: const Color(0xFFA5D6A7), width: 0.8),
+                    ),
+                    child: Text(
+                      "BWD ${item.bwdValue ?? '-'} (${item.bwdStatus ?? 'Normal'})",
+                      style: const TextStyle(
+                        color: Color(0xFF1B5E20),
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                      ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                ],
+                Container(
+                  constraints: const BoxConstraints(maxWidth: 120),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: tagColor,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    item.penyakit.length > 18 ? "Penyakit" : item.penyakit,
+                    style: TextStyle(
+                      color: tagTextColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
             const SizedBox(width: 4),
             Icon(Icons.chevron_right, color: Colors.grey[400], size: 20),

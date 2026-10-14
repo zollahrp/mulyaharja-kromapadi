@@ -18,7 +18,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     {
       "title": "Era Baru Agrikultur",
       "description": "Hadirkan teknologi cerdas pemantauan daun padi langsung di genggaman Anda.",
-      "image": "https://images.unsplash.com/photo-1586771107445-d3af9e15fa57?q=80&w=1000&auto=format&fit=crop"
+      "image": "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1000&auto=format&fit=crop"
     },
     {
       "title": "Analisis Nutrisi Akurat",
@@ -71,6 +71,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         Image.network(
                           onboardingData[index]["image"]!,
                           fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) => Container(
+                            color: const Color(0xFFE8F5E9),
+                            child: const Center(
+                              child: Icon(Icons.eco, size: 80, color: AppColors.primaryGreen),
+                            ),
+                          ),
                         ),
                         // Gradient Overlay untuk memudarkan gambar ke putih secara mulus
                         Container(

@@ -148,9 +148,12 @@ class _ScanScreenState extends State<ScanScreen> {
       final lahans = await _lahanService.getLahan();
       if (!mounted) return;
       setState(() {
-        _lahans = lahans.where((l) => l.isAktif).toList();
+        _lahans = lahans;
         if (_lahans.isNotEmpty) {
-          _selectedLahan = _lahans.first;
+          _selectedLahan = _lahans.firstWhere(
+            (l) => l.isAktif,
+            orElse: () => _lahans.first,
+          );
         }
         _isLoadingLahan = false;
       });
@@ -241,6 +244,16 @@ class _ScanScreenState extends State<ScanScreen> {
   }
 
   Future<void> _navigateToResult(XFile image) async {
+    if (_selectedLahan == null || _selectedLahan!.id <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Peringatan: Belum ada lahan yang terdaftar atau dipilih untuk akun Anda.'),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     int? luxValue;
     if (!kIsWeb) {
       try {
@@ -271,7 +284,7 @@ class _ScanScreenState extends State<ScanScreen> {
       MaterialPageRoute(
         builder: (context) => ScanResultScreen(
           imageFile: image, 
-          lahanId: _selectedLahan?.id ?? 0,
+          lahanId: _selectedLahan!.id,
           luxValue: luxValue,
           plantAgeDays: plantAgeDays,
         ),
@@ -305,7 +318,9 @@ class _ScanScreenState extends State<ScanScreen> {
       body: Column(
         children: [
           _buildStepIndicator(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 10),
+          _buildLahanSelector(),
+          const SizedBox(height: 10),
           Expanded(
             child: Stack(
               children: [
@@ -318,6 +333,102 @@ class _ScanScreenState extends State<ScanScreen> {
           _buildBottomPanel(),
         ],
       ),
+    );
+  }
+
+  Widget _buildLahanSelector() {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24.0),
+      child: InkWell(
+        onTap: _lahans.length > 1 ? _showLahanPicker : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: const Color(0xFFF1F8E9),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: const Color(0xFFC8E6C9)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.location_on, size: 16, color: AppColors.primaryGreen),
+              const SizedBox(width: 6),
+              Flexible(
+                child: Text(
+                  _selectedLahan != null
+                      ? "Lahan: ${_selectedLahan!.name}"
+                      : (_isLoadingLahan ? "Memuat lahan..." : "Tidak ada lahan aktif"),
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Color(0xFF1B5E20),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              if (_lahans.length > 1) ...[
+                const SizedBox(width: 4),
+                const Icon(Icons.keyboard_arrow_down, size: 16, color: Color(0xFF1B5E20)),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showLahanPicker() {
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                "Pilih Lahan Tani",
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppColors.textBlack),
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: _lahans.length,
+                  separatorBuilder: (context, index) => const Divider(height: 1),
+                  itemBuilder: (context, index) {
+                    final lahan = _lahans[index];
+                    final isSelected = lahan.id == _selectedLahan?.id;
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        lahan.name,
+                        style: TextStyle(fontWeight: isSelected ? FontWeight.bold : FontWeight.normal),
+                      ),
+                      subtitle: Text(
+                        lahan.isAktif ? 'Masa Tanam Aktif' : 'Masa Tanam Non-Aktif',
+                        style: TextStyle(color: lahan.isAktif ? Colors.green : Colors.grey, fontSize: 12),
+                      ),
+                      trailing: isSelected ? const Icon(Icons.check_circle, color: AppColors.primaryGreen) : null,
+                      onTap: () {
+                        setState(() {
+                          _selectedLahan = lahan;
+                        });
+                        Navigator.pop(context);
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 

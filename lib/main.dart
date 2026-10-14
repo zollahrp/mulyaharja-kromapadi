@@ -9,16 +9,16 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
-  runApp(const KromaPadiApp());
+  runApp(const PadiNexaApp());
 }
 
-class KromaPadiApp extends StatelessWidget {
-  const KromaPadiApp({super.key});
+class PadiNexaApp extends StatelessWidget {
+  const PadiNexaApp({super.key});
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Mulyaharja-KromaPadi',
+      title: 'Mulyaharja-PadiNexa',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         scaffoldBackgroundColor: AppColors.background,

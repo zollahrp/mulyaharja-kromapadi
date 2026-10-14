@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../utils/app_colors.dart';
 import '../../services/auth_service.dart';
+import '../../models/user_model.dart';
 import '../auth/login_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -11,6 +12,23 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  UserModel? _user;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUser();
+  }
+
+  Future<void> _loadUser() async {
+    final user = await AuthService().getCurrentUser();
+    if (mounted) {
+      setState(() {
+        _user = user;
+      });
+    }
+  }
+
   void _showComingSoon(String featureName) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -30,7 +48,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         return AlertDialog(
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
           title: const Text("Keluar", style: TextStyle(fontWeight: FontWeight.bold)),
-          content: const Text("Apakah Anda yakin ingin keluar dari akun Kromapadi?"),
+          content: const Text("Apakah Anda yakin ingin keluar dari akun PadiNexa?"),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
@@ -92,7 +110,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       _buildDivider(),
                       _buildSettingsItem(Icons.help_outline, "Pusat Bantuan", "FAQ dan layanan pelanggan", () => _showComingSoon("Pusat Bantuan")),
                       _buildDivider(),
-                      _buildSettingsItem(Icons.info_outline, "Tentang Kromapadi", "Versi 1.0.0", () => _showComingSoon("Tentang Kromapadi")),
+                      _buildSettingsItem(Icons.info_outline, "Tentang PadiNexa", "Versi 1.0.0", () => _showComingSoon("Tentang PadiNexa")),
                     ]),
                     
                     const SizedBox(height: 32),
@@ -162,8 +180,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text(
-                  "Zolla",
+                Text(
+                  _user?.name ?? "Memuat...",
                   style: TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
@@ -172,7 +190,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "+62 812-3456-7890",
+                  _user?.email ?? "Memuat...",
                   style: TextStyle(
                     fontSize: 14,
                     color: Colors.grey[600],

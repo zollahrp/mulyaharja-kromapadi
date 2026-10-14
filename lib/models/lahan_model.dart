@@ -1,4 +1,4 @@
-class LahanModel {
+﻿class LahanModel {
   final int id;
   final int kelompokTaniId;
   final String name;
@@ -6,6 +6,7 @@ class LahanModel {
   final bool isAktif;
   final String? tanggalTanam;
   final int? hst;
+  final String? fotoPath;
 
   LahanModel({
     required this.id,
@@ -15,6 +16,7 @@ class LahanModel {
     required this.isAktif,
     this.tanggalTanam,
     this.hst,
+    this.fotoPath,
   });
 
   factory LahanModel.fromJson(Map<String, dynamic> json) {
@@ -34,6 +36,7 @@ class LahanModel {
       isAktif: json['is_aktif'] == true || json['is_aktif'] == 1 || json['is_aktif'] == '1',
       tanggalTanam: json['tanggal_tanam']?.toString(),
       hst: parseToInt(json['hst']),
+      fotoPath: json['foto_path']?.toString(),
     );
   }
 }
