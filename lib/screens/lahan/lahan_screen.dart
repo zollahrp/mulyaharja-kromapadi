@@ -220,8 +220,7 @@ class _LahanScreenState extends State<LahanScreen> {
 
   String _getFullImageUrl(String? path) {
     if (path == null || path.isEmpty) return '';
-    if (path.startsWith('http')) return path;
-    return '${ApiService.baseUrl}/storage/$path';
+    return ApiService.getStorageUrl(path);
   }
 
   Widget _buildLahanList(List<LahanModel> lahanList) {

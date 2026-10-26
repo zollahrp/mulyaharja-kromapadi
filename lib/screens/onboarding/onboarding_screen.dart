@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/app_colors.dart';
@@ -19,29 +20,39 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     {
       "title": "Era Baru Agrikultur",
       "description": "Hadirkan teknologi cerdas pemantauan daun padi langsung di genggaman Anda.",
-      "image": "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1000&auto=format&fit=crop"
+      "image": "assets/images/onboarding_1.jpg"
     },
     {
       "title": "Analisis Nutrisi Akurat",
       "description": "Ketahui tingkat kebutuhan Nitrogen, Fosfor, dan Kalium secara real-time untuk pertumbuhan optimal.",
-      "image": "https://images.unsplash.com/photo-1629737966373-fb94e1e127de?q=80&w=1000&auto=format&fit=crop"
+      "image": "assets/images/onboarding_2.jpg"
     },
     {
       "title": "Deteksi Ancaman Dini",
       "description": "Cegah penyebaran sebelum terlambat. Identifikasi penyakit dan hama pada daun dalam tahap paling awal.",
-      "image": "https://images.unsplash.com/photo-1599940824399-b87987ceb72a?q=80&w=1000&auto=format&fit=crop"
+      "image": "assets/images/onboarding_3.jpg"
     },
     {
       "title": "Satu Pindaian Pintar",
       "description": "Arahkan kamera perangkat Anda, dan biarkan kecerdasan buatan kami bekerja dalam hitungan detik.",
-      "image": "https://images.unsplash.com/photo-1523741543316-beb7fc7023d8?q=80&w=1000&auto=format&fit=crop"
+      "image": "assets/images/onboarding_4.jpg"
     },
     {
       "title": "Masa Depan Panen Anda",
       "description": "Ambil keputusan berbasis data hari ini, dan nikmati hasil panen yang jauh lebih berlimpah esok hari.",
-      "image": "https://images.unsplash.com/photo-1500382017468-9049fed747ef?q=80&w=1000&auto=format&fit=crop"
+      "image": "assets/images/onboarding_5.jpg"
     },
   ];
+
+  Future<void> _finishOnboarding() async {
+    final navigator = Navigator.of(context);
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('has_seen_onboarding', true);
+    if (!mounted) return;
+    navigator.pushReplacement(
+      MaterialPageRoute(builder: (context) => const LoginScreen()),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -60,6 +71,47 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             },
             itemCount: onboardingData.length,
             itemBuilder: (context, index) {
+              final imagePath = onboardingData[index]["image"]!;
+
+              Widget buildImage() {
+                final placeholder = Container(
+                  color: const Color(0xFFE8F5E9),
+                  child: const Center(
+                    child: Icon(Icons.eco, size: 80, color: AppColors.primaryGreen),
+                  ),
+                );
+
+                if (imagePath.startsWith('http')) {
+                  return Image.network(
+                    imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => placeholder,
+                  );
+                }
+
+                if (kIsWeb) {
+                  return Image.network(
+                    imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => Image.asset(
+                      imagePath,
+                      fit: BoxFit.cover,
+                      errorBuilder: (context, error, stackTrace) => placeholder,
+                    ),
+                  );
+                }
+
+                return Image.asset(
+                  imagePath,
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) => Image.network(
+                    imagePath,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) => placeholder,
+                  ),
+                );
+              }
+
               return Column(
                 children: [
                   // Gambar Full Width dengan efek Seamless Fade ke Bawah
@@ -69,16 +121,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     child: Stack(
                       fit: StackFit.expand,
                       children: [
-                        Image.network(
-                          onboardingData[index]["image"]!,
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stackTrace) => Container(
-                            color: const Color(0xFFE8F5E9),
-                            child: const Center(
-                              child: Icon(Icons.eco, size: 80, color: AppColors.primaryGreen),
-                            ),
-                          ),
-                        ),
+                        buildImage(),
                         // Gradient Overlay untuk memudarkan gambar ke putih secara mulus
                         Container(
                           decoration: BoxDecoration(
@@ -88,7 +131,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                               colors: [
                                 Colors.transparent,
                                 Colors.transparent,
-                                Colors.white.withOpacity(0.5),
+                                Colors.white.withValues(alpha: 0.5),
                                 Colors.white,
                               ],
                               stops: const [0.0, 0.6, 0.85, 1.0],
@@ -111,7 +154,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: AppColors.primaryGreen.withOpacity(0.08),
+                              color: AppColors.primaryGreen.withValues(alpha: 0.08),
                               shape: BoxShape.circle,
                             ),
                             child: Image.asset(
@@ -163,11 +206,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.9),
+                      color: Colors.white.withValues(alpha: 0.9),
                       borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.06),
+                          color: Colors.black.withValues(alpha: 0.06),
                           blurRadius: 10,
                           offset: const Offset(0, 2),
                         ),
@@ -200,25 +243,16 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                     opacity: _currentPage == onboardingData.length - 1 ? 0.0 : 1.0,
                     duration: const Duration(milliseconds: 300),
                     child: InkWell(
-                      onTap: () async {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('has_seen_onboarding', true);
-                        if (mounted) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => const LoginScreen()),
-                          );
-                        }
-                      },
+                      onTap: _finishOnboarding,
                       borderRadius: BorderRadius.circular(20),
                       child: Container(
                         padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
                         decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.85),
+                          color: Colors.white.withValues(alpha: 0.85),
                           borderRadius: BorderRadius.circular(20),
                           boxShadow: [
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.05),
+                              color: Colors.black.withValues(alpha: 0.05),
                               blurRadius: 10,
                             ),
                           ],
@@ -258,16 +292,9 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                   width: double.infinity,
                   height: 56, // Sedikit lebih tinggi biar terkesan Premium
                   child: ElevatedButton(
-                    onPressed: () async {
+                    onPressed: () {
                       if (_currentPage == onboardingData.length - 1) {
-                        final prefs = await SharedPreferences.getInstance();
-                        await prefs.setBool('has_seen_onboarding', true);
-                        if (mounted) {
-                          Navigator.pushReplacement(
-                            context,
-                            MaterialPageRoute(builder: (context) => const LoginScreen()),
-                          );
-                        }
+                        _finishOnboarding();
                       } else {
                         _pageController.nextPage(
                           duration: const Duration(milliseconds: 400),
@@ -282,7 +309,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                         borderRadius: BorderRadius.circular(16),
                       ),
                       elevation: 4, // Sedikit bayangan untuk kedalaman
-                      shadowColor: AppColors.darkGreen.withOpacity(0.4),
+                      shadowColor: AppColors.darkGreen.withValues(alpha: 0.4),
                     ),
                     // AnimatedSwitcher untuk efek transisi teks pada tombol
                     child: AnimatedSwitcher(

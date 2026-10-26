@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../utils/app_colors.dart';
@@ -10,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
 import 'package:light/light.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import '../../services/leaf_detector_service.dart';
 
 class ScanScreen extends StatefulWidget {
   const ScanScreen({super.key});
@@ -25,6 +27,16 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   bool _isFlashOn = false;
   int _currentCameraIndex = 0;
   final ImagePicker _picker = ImagePicker();
+
+  // Zoom control & distance guidance
+  double _currentZoom = 1.0;
+  double _minZoom = 1.0;
+  double _maxZoom = 4.0;
+  double _baseZoom = 1.0;
+
+  // Real-time leaf presence & distance detector
+  final LeafDetectorPlatform _leafDetector = LeafDetectorPlatform();
+  LeafDetectionResult? _detectionResult = LeafDetectionResult.initial;
 
   final LahanService _lahanService = LahanService();
   List<LahanModel> _lahans = [];
@@ -203,16 +215,56 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
 
     try {
       await _cameraController!.initialize();
-      setState(() {
-        _isCameraInitialized = true;
-      });
+      double minZ = 1.0;
+      double maxZ = 4.0;
+      try {
+        minZ = await _cameraController!.getMinZoomLevel();
+        maxZ = (await _cameraController!.getMaxZoomLevel()).clamp(1.0, 6.0);
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _isCameraInitialized = true;
+          _minZoom = minZ;
+          _maxZoom = maxZ;
+          _currentZoom = 1.0.clamp(minZ, maxZ);
+        });
+
+        // Jalankan pendeteksi jarak daun padi secara real-time
+        _leafDetector.start(
+          getZoomLevel: () => _currentZoom,
+          onResult: (result) {
+            if (!mounted) return;
+            setState(() {
+              _detectionResult = result;
+            });
+          },
+        );
+      }
     } catch (e) {
       debugPrint("Error initializing camera: $e");
     }
   }
 
+  Future<void> _setZoom(double zoom) async {
+    if (_cameraController == null || !_cameraController!.value.isInitialized) return;
+    final target = zoom.clamp(_minZoom, _maxZoom);
+    try {
+      await _cameraController!.setZoomLevel(target);
+      if (mounted) {
+        setState(() {
+          _currentZoom = target;
+        });
+      }
+      HapticFeedback.selectionClick();
+    } catch (e) {
+      debugPrint("Zoom error: $e");
+    }
+  }
+
   @override
   void dispose() {
+    _leafDetector.dispose();
     _scanAnimationController.dispose();
     _cameraController?.dispose();
     super.dispose();
@@ -238,7 +290,12 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
   }
 
   Future<void> _pickFromGallery() async {
-    final XFile? image = await _picker.pickImage(source: ImageSource.gallery);
+    final XFile? image = await _picker.pickImage(
+      source: ImageSource.gallery,
+      maxWidth: 1280,
+      maxHeight: 1280,
+      imageQuality: 80,
+    );
     if (image != null) {
       _navigateToResult(image);
     }
@@ -288,7 +345,8 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
       } else if (_selectedLahan!.tanggalTanam != null && _selectedLahan!.tanggalTanam!.isNotEmpty) {
         try {
           DateTime plantingDate = DateTime.parse(_selectedLahan!.tanggalTanam!);
-          plantAgeDays = DateTime.now().difference(plantingDate).inDays;
+          // Hitung umur tanaman per 15 Oktober 2026 sesuai tanggal sampel penelitian
+          plantAgeDays = DateTime(2026, 10, 15).difference(plantingDate).inDays;
         } catch (e) {
           debugPrint("Error parse tanggalTanam: $e");
         }
@@ -554,10 +612,20 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
       ),
       clipBehavior: Clip.antiAlias,
       child: _isCameraInitialized
-          ? SizedBox(
-              width: double.infinity,
-              height: double.infinity,
-              child: CameraPreview(_cameraController!),
+          ? GestureDetector(
+              onScaleStart: (details) {
+                _baseZoom = _currentZoom;
+              },
+              onScaleUpdate: (details) {
+                if (_cameraController == null || !_isCameraInitialized) return;
+                final newZoom = (_baseZoom * details.scale).clamp(_minZoom, _maxZoom);
+                _setZoom(newZoom);
+              },
+              child: SizedBox(
+                width: double.infinity,
+                height: double.infinity,
+                child: CameraPreview(_cameraController!),
+              ),
             )
           : const Center(
               child: CircularProgressIndicator(color: Colors.white),
@@ -685,6 +753,8 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
         final double maxH = constraints.maxHeight;
         final double maxW = constraints.maxWidth;
 
+        final detection = _detectionResult ?? LeafDetectionResult.initial;
+
         // Dimensi kotak pemindaian proporsional dan responsif secara dinamis
         final double boxWidth = (maxW * 0.72).clamp(160.0, 260.0);
         final double boxHeight = (maxH * 0.58).clamp(140.0, 310.0);
@@ -694,22 +764,49 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
           children: [
             // Area instruksi teks pill mengambang di atas reticle
             Positioned(
-              top: (maxH / 2 - boxHeight / 2 - 42).clamp(10.0, maxH),
+              top: (maxH / 2 - boxHeight / 2 - 44).clamp(10.0, maxH),
               child: Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.65),
+                  color: Colors.black.withValues(alpha: 0.75),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.2), width: 1),
+                  border: Border.all(
+                    color: detection.isRiceLeafPresent && !detection.isTooFar
+                        ? AppColors.primaryGreen.withValues(alpha: 0.8)
+                        : (detection.isTooFar
+                            ? const Color(0xFFF59E0B).withValues(alpha: 0.8)
+                            : Colors.white.withValues(alpha: 0.2)),
+                    width: 1,
+                  ),
                 ),
-                child: const Row(
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.center_focus_strong, color: Colors.greenAccent, size: 14),
-                    SizedBox(width: 6),
+                    Icon(
+                      detection.isRiceLeafPresent && !detection.isTooFar
+                          ? Icons.check_circle_rounded
+                          : (detection.isTooFar
+                              ? Icons.straighten_rounded
+                              : (_currentZoom > 1.2 ? Icons.zoom_in_rounded : Icons.center_focus_strong)),
+                      color: detection.isRiceLeafPresent && !detection.isTooFar
+                          ? Colors.greenAccent
+                          : (detection.isTooFar ? const Color(0xFFFBBF24) : Colors.greenAccent),
+                      size: 14,
+                    ),
+                    const SizedBox(width: 6),
                     Text(
-                      "Posisikan daun di dalam kotak",
-                      style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600),
+                      detection.isRiceLeafPresent
+                          ? detection.statusMessage
+                          : (_currentZoom > 1.2
+                              ? "Zoom ${_currentZoom.toStringAsFixed(1)}x — Arahkan ke Daun"
+                              : detection.statusMessage),
+                      style: TextStyle(
+                        color: detection.isRiceLeafPresent && !detection.isTooFar
+                            ? Colors.greenAccent
+                            : (detection.isTooFar ? const Color(0xFFFBBF24) : Colors.white),
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -722,16 +819,32 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                 width: boxWidth,
                 height: boxHeight,
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.white.withOpacity(0.35), width: 1.5),
+                  border: Border.all(
+                    color: detection.isRiceLeafPresent && !detection.isTooFar
+                        ? AppColors.primaryGreen.withValues(alpha: 0.5)
+                        : Colors.white.withValues(alpha: 0.35),
+                    width: 1.5,
+                  ),
                   borderRadius: BorderRadius.circular(16),
                 ),
                 child: Stack(
                   children: [
-                    // Corner Brackets
-                    Positioned(top: 0, left: 0, child: _buildCorner(top: true, left: true)),
-                    Positioned(top: 0, right: 0, child: _buildCorner(top: true, left: false)),
-                    Positioned(bottom: 0, left: 0, child: _buildCorner(top: false, left: true)),
-                    Positioned(bottom: 0, right: 0, child: _buildCorner(top: false, left: false)),
+                    // Corner Brackets dengan Warna Adaptif Terhadap Deteksi Daun
+                    Builder(
+                      builder: (context) {
+                        final Color cornerColor = detection.isRiceLeafPresent
+                            ? (detection.isTooFar ? const Color(0xFFFBBF24) : Colors.greenAccent)
+                            : Colors.white.withValues(alpha: 0.7);
+                        return Stack(
+                          children: [
+                            Positioned(top: 0, left: 0, child: _buildCorner(top: true, left: true, color: cornerColor)),
+                            Positioned(top: 0, right: 0, child: _buildCorner(top: true, left: false, color: cornerColor)),
+                            Positioned(bottom: 0, left: 0, child: _buildCorner(top: false, left: true, color: cornerColor)),
+                            Positioned(bottom: 0, right: 0, child: _buildCorner(top: false, left: false, color: cornerColor)),
+                          ],
+                        );
+                      },
+                    ),
 
                     // Laser Scan Line Animasi Vertikal
                     AnimatedBuilder(
@@ -744,18 +857,19 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                           child: Container(
                             height: 2,
                             decoration: BoxDecoration(
-                              gradient: const LinearGradient(
+                              gradient: LinearGradient(
                                 colors: [
                                   Colors.transparent,
-                                  AppColors.primaryGreen,
-                                  Colors.greenAccent,
-                                  AppColors.primaryGreen,
+                                  detection.isTooFar ? const Color(0xFFF59E0B) : AppColors.primaryGreen,
+                                  detection.isTooFar ? const Color(0xFFFBBF24) : Colors.greenAccent,
+                                  detection.isTooFar ? const Color(0xFFF59E0B) : AppColors.primaryGreen,
                                   Colors.transparent,
                                 ],
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.greenAccent.withOpacity(0.7),
+                                  color: (detection.isTooFar ? const Color(0xFFFBBF24) : Colors.greenAccent)
+                                      .withValues(alpha: 0.7),
                                   blurRadius: 6,
                                   spreadRadius: 1,
                                 ),
@@ -769,22 +883,130 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
                 ),
               ),
             ),
+
+            // Notifikasi Peringatan: HANYA muncul jika objek daun padi terdeteksi DAN jaraknya terlalu jauh
+            if (detection.isRiceLeafPresent && detection.isTooFar)
+              Positioned(
+                top: (maxH / 2 + boxHeight / 2 + 10).clamp(10.0, maxH - 85),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF0F172A).withValues(alpha: 0.92),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.9), width: 1.2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.35),
+                        blurRadius: 8,
+                        offset: const Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.straighten_rounded, color: Color(0xFFFBBF24), size: 15),
+                      const SizedBox(width: 6),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            "Objek Terlalu Jauh",
+                            style: TextStyle(
+                              color: Color(0xFFFBBF24),
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            "Dekatkan (15-20 cm) atau gunakan Zoom",
+                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w500),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(width: 8),
+                      InkWell(
+                        onTap: () => _setZoom(2.0),
+                        borderRadius: BorderRadius.circular(12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3.5),
+                          decoration: BoxDecoration(
+                            color: AppColors.primaryGreen,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.zoom_in_rounded, color: Colors.white, size: 13),
+                              SizedBox(width: 2),
+                              Text(
+                                "Zoom 2x",
+                                style: TextStyle(color: Colors.white, fontSize: 10.5, fontWeight: FontWeight.bold),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+            // Baris Pilihan Cepat Zoom Kamera (1x, 1.5x, 2x, 3x)
+            Positioned(
+              bottom: 12,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.65),
+                  borderRadius: BorderRadius.circular(24),
+                  border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [1.0, 1.5, 2.0, 3.0].map((zoomVal) {
+                    final bool isSelected = (_currentZoom - zoomVal).abs() < 0.24;
+                    return GestureDetector(
+                      onTap: () => _setZoom(zoomVal),
+                      child: Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 3),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: isSelected ? AppColors.primaryGreen : Colors.transparent,
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        child: Text(
+                          "${zoomVal.toStringAsFixed(zoomVal == 1.0 || zoomVal == 2.0 || zoomVal == 3.0 ? 0 : 1)}x",
+                          style: TextStyle(
+                            color: isSelected ? Colors.white : Colors.white70,
+                            fontSize: 11.5,
+                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+            ),
           ],
         );
       },
     );
   }
 
-  Widget _buildCorner({required bool top, required bool left}) {
+  Widget _buildCorner({required bool top, required bool left, Color? color}) {
+    final cornerColor = color ?? Colors.greenAccent;
     return Container(
       width: 22,
       height: 22,
       decoration: BoxDecoration(
         border: Border(
-          top: top ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
-          bottom: !top ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
-          left: left ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
-          right: !left ? const BorderSide(color: Colors.greenAccent, width: 3.5) : BorderSide.none,
+          top: top ? BorderSide(color: cornerColor, width: 3.5) : BorderSide.none,
+          bottom: !top ? BorderSide(color: cornerColor, width: 3.5) : BorderSide.none,
+          left: left ? BorderSide(color: cornerColor, width: 3.5) : BorderSide.none,
+          right: !left ? BorderSide(color: cornerColor, width: 3.5) : BorderSide.none,
         ),
       ),
     );

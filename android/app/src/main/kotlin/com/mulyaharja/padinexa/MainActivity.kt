@@ -1,4 +1,4 @@
-package com.example.mulyaharja_padinexa
+package com.mulyaharja.padinexa
 
 import io.flutter.embedding.android.FlutterActivity
 

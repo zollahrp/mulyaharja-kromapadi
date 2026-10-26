@@ -18,9 +18,9 @@ class ExportService {
         item.lahan?.name ?? "Lahan Utama",
         item.bwdValue ?? "-",
         item.bwdStatus ?? "-",
-        item.penyakit,
+        item.statusTagText,
         item.akurasi ?? 0.0,
-        item.tindakan,
+        item.recommendationText,
       ]);
     }
 
@@ -46,13 +46,13 @@ class ExportService {
             pw.Header(level: 0, child: pw.Text("Laporan Riwayat Scan PadiNexa (BWD & Penyakit)")),
             pw.TableHelper.fromTextArray(
               context: context,
-              headers: ["Tanggal", "Lahan", "Nilai BWD", "Status BWD", "Penyakit", "Akurasi"],
+              headers: ["Tanggal", "Lahan", "Nilai BWD", "Status BWD", "Kondisi / Penyakit", "Akurasi"],
               data: data.map((item) => [
                 item.formattedDateTime,
                 item.lahan?.name ?? "Lahan Utama",
                 item.bwdValue?.toString() ?? "-",
                 item.bwdStatus ?? "-",
-                item.penyakit,
+                item.statusTagText,
                 "${item.akurasi ?? 0.0}%"
               ]).toList(),
             ),

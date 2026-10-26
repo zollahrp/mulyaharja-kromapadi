@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart'; // Import package baru
 import 'utils/app_colors.dart';
-import 'screens/onboarding/onboarding_screen.dart';
-import 'screens/auth/login_screen.dart';
 import 'screens/splash/splash_screen.dart';
 
 import 'package:flutter_dotenv/flutter_dotenv.dart';

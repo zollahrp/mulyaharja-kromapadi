@@ -1,0 +1,10 @@
+# Konfigurasi Keystore Release untuk Google Play Store
+# 1. Generate keystore dengan perintah:
+#    keytool -genkey -v -keystore upload-keystore.jks -storetype JKS -keyalg RSA -keysize 2048 -validity 10000 -alias upload
+# 2. Simpan file 'upload-keystore.jks' di dalam folder 'android/app/'
+# 3. Salin isi file ini ke 'android/key.properties' lalu isi password yang Anda buat:
+
+storePassword=password_keystore_anda
+keyPassword=password_key_anda
+keyAlias=upload
+storeFile=upload-keystore.jks

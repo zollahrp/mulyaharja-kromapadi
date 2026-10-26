@@ -81,14 +81,31 @@ class _MainNavigationState extends State<MainNavigation> {
           children: [
             _buildNavItem(0, Icons.home, "Beranda"),
             _buildNavItem(1, Icons.history, "Riwayat"),
-            SizedBox(
-              width: 60,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text("Scan", style: TextStyle(fontSize: 11, color: Colors.grey[600], fontWeight: FontWeight.w500)),
-                  const SizedBox(height: 6),
-                ],
+            InkWell(
+              onTap: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ScanScreen()),
+                );
+              },
+              child: SizedBox(
+                width: 60,
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const SizedBox(height: 26),
+                    const SizedBox(height: 4),
+                    Text(
+                      "Scan",
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.normal,
+                        color: Colors.grey[500],
+                      ),
+                    ),
+                  ],
+                ),
               ),
             ),
             _buildNavItem(3, Icons.eco_outlined, "Lahan"),

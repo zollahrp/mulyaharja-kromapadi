@@ -10,7 +10,15 @@ import '../../utils/app_colors.dart';
 import '../../services/gemini_service.dart';
 import '../../services/scan_history_service.dart';
 import '../../services/weather_service.dart';
+import '../../widgets/image_zoom_viewer.dart';
 import '../main_navigation.dart';
+
+enum _ScanErrorType {
+  highDemand,
+  invalidLeaf,
+  network,
+  general,
+}
 
 class ScanResultScreen extends StatefulWidget {
   final XFile imageFile;
@@ -39,8 +47,8 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   bool _isSaving = false;
   Map<String, dynamic>? _analysisResult;
   String? _errorMessage;
+  bool _showTechnicalDetails = false;
 
-  String? _weatherDesc;
   double? _temp;
   int? _humidity;
 
@@ -114,7 +122,6 @@ class _ScanResultScreenState extends State<ScanResultScreen>
 
     if (mounted) {
       setState(() {
-        _weatherDesc = weatherDesc;
         _temp = temp;
         _humidity = humidity;
       });
@@ -168,106 +175,577 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   }
 
   Widget _buildErrorView() {
-    final isInvalidLeaf = _errorMessage != null &&
-        (_errorMessage!.toLowerCase().contains('bukan daun') ||
-            _errorMessage!.toLowerCase().contains('kertas') ||
-            _errorMessage!.toLowerCase().contains('hewan') ||
-            _errorMessage!.toLowerCase().contains('tanaman non-padi'));
+    final errorType = _classifyError(_errorMessage);
+
+    String displayMessage = _errorMessage ?? "Terjadi kendala saat memproses sampel daun.";
+    if (errorType == _ScanErrorType.highDemand) {
+      displayMessage =
+          "Server Google AI sedang mengalami antrean trafik tinggi sesaat (HTTP 503). Lonjakan ini bersifat sementara dan biasanya reda dalam beberapa detik.";
+    } else if (errorType == _ScanErrorType.network) {
+      displayMessage =
+          "Tidak dapat terhubung ke server cerdas AI. Pastikan perangkat Anda memiliki koneksi internet aktif (Data Seluler atau WiFi).";
+    }
 
     return SafeArea(
-      child: Center(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 28),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
+        children: [
+          // Header Navigasi Atas
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            child: Row(
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Color(0xFF0F172A), size: 20),
+                  onPressed: () => Navigator.pop(context),
+                  tooltip: 'Kembali',
+                ),
+                const Expanded(
+                  child: Text(
+                    "Pemeriksaan Sampel",
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Color(0xFF0F172A),
+                      fontSize: 16,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 48),
+              ],
+            ),
+          ),
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 440),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      // Hero Visual & Status Chip
+                      _buildErrorHero(errorType),
+
+                      const SizedBox(height: 20),
+
+                      // Judul Kesalahan yang Ramah
+                      Text(
+                        _getErrorTitle(errorType),
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF0F172A),
+                          letterSpacing: -0.4,
+                        ),
+                      ),
+
+                      const SizedBox(height: 10),
+
+                      // Penjelasan Deskriptif
+                      Text(
+                        displayMessage,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          color: Color(0xFF64748B),
+                          height: 1.55,
+                        ),
+                      ),
+
+                      const SizedBox(height: 20),
+
+                      // Kartu Informasi / Panduan Solusi
+                      _buildErrorAdviceCard(errorType),
+
+                      const SizedBox(height: 24),
+
+                      // Tombol Aksi Cerdas
+                      _buildErrorActions(errorType),
+
+                      // Detail Teknis Opsional (Collapsible)
+                      if (errorType == _ScanErrorType.general || errorType == _ScanErrorType.highDemand)
+                        _buildTechnicalDetailsToggle(),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  _ScanErrorType _classifyError(String? message) {
+    if (message == null) return _ScanErrorType.general;
+    final m = message.toLowerCase();
+    if (m.contains('503') ||
+        m.contains('high demand') ||
+        m.contains('unavailable') ||
+        m.contains('server_busy') ||
+        m.contains('resource has been exhausted') ||
+        m.contains('resource_exhausted') ||
+        m.contains('429') ||
+        m.contains('antrean trafik')) {
+      return _ScanErrorType.highDemand;
+    }
+    if (m.contains('bukan daun') ||
+        m.contains('kertas') ||
+        m.contains('hewan') ||
+        m.contains('tanaman non-padi') ||
+        m.contains('terlalu jauh') ||
+        m.contains('benda buatan') ||
+        m.contains('benda berwarna hijau')) {
+      return _ScanErrorType.invalidLeaf;
+    }
+    if (m.contains('socketexception') ||
+        m.contains('failed host lookup') ||
+        m.contains('network') ||
+        m.contains('connection') ||
+        m.contains('timeout') ||
+        m.contains('clientexception')) {
+      return _ScanErrorType.network;
+    }
+    return _ScanErrorType.general;
+  }
+
+  String _getErrorTitle(_ScanErrorType type) {
+    switch (type) {
+      case _ScanErrorType.highDemand:
+        return "Layanan AI Sedang Ramai";
+      case _ScanErrorType.invalidLeaf:
+        return "Sampel Belum Sesuai";
+      case _ScanErrorType.network:
+        return "Koneksi Terputus";
+      case _ScanErrorType.general:
+        return "Gagal Menganalisis";
+    }
+  }
+
+  Widget _buildErrorHero(_ScanErrorType type) {
+    Color ringColor = const Color(0xFFFEF3C7);
+    Color iconBg = const Color(0xFFFFFBEB);
+    Color iconColor = const Color(0xFFD97706);
+    IconData icon = Icons.cloud_sync_rounded;
+    String badgeText = "Antrean Server Google (HTTP 503)";
+    Color badgeBg = const Color(0xFFFEF3C7);
+    Color badgeTextCol = const Color(0xFFB45309);
+
+    switch (type) {
+      case _ScanErrorType.highDemand:
+        ringColor = const Color(0xFFFEF3C7);
+        iconBg = const Color(0xFFFFFBEB);
+        iconColor = const Color(0xFFD97706);
+        icon = Icons.cloud_sync_rounded;
+        badgeText = "Antrean Server Google (HTTP 503)";
+        badgeBg = const Color(0xFFFEF3C7);
+        badgeTextCol = const Color(0xFFB45309);
+        break;
+      case _ScanErrorType.invalidLeaf:
+        ringColor = const Color(0xFFFEF3C7);
+        iconBg = const Color(0xFFFFFBEB);
+        iconColor = const Color(0xFFD97706);
+        icon = Icons.hide_image_outlined;
+        badgeText = "Verifikasi Sampel Daun";
+        badgeBg = const Color(0xFFFEF3C7);
+        badgeTextCol = const Color(0xFFB45309);
+        break;
+      case _ScanErrorType.network:
+        ringColor = const Color(0xFFE2E8F0);
+        iconBg = const Color(0xFFF1F5F9);
+        iconColor = const Color(0xFF64748B);
+        icon = Icons.wifi_off_rounded;
+        badgeText = "Koneksi Terputus";
+        badgeBg = const Color(0xFFF1F5F9);
+        badgeTextCol = const Color(0xFF475569);
+        break;
+      case _ScanErrorType.general:
+        ringColor = const Color(0xFFFEE2E2);
+        iconBg = const Color(0xFFFEF2F2);
+        iconColor = const Color(0xFFEF4444);
+        icon = Icons.sync_problem_rounded;
+        badgeText = "Kendala Pemrosesan";
+        badgeBg = const Color(0xFFFEE2E2);
+        badgeTextCol = const Color(0xFFB91C1C);
+        break;
+    }
+
+    return Column(
+      children: [
+        Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              width: 104,
+              height: 104,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: ringColor.withOpacity(0.55),
+              ),
+            ),
+            Container(
+              width: 84,
+              height: 84,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: iconBg,
+                border: Border.all(color: ringColor, width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: ringColor.withOpacity(0.6),
+                    blurRadius: 16,
+                    offset: const Offset(0, 4),
+                  ),
+                ],
+              ),
+              child: Icon(icon, color: iconColor, size: 38),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+          decoration: BoxDecoration(
+            color: badgeBg,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: ringColor),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                width: 92,
-                height: 92,
-                decoration: BoxDecoration(
-                  color: isInvalidLeaf ? const Color(0xFFFFFBEB) : const Color(0xFFFEF2F2),
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: isInvalidLeaf ? const Color(0xFFFDE68A) : const Color(0xFFFEE2E2),
-                    width: 2,
-                  ),
-                ),
-                child: Icon(
-                  isInvalidLeaf ? Icons.hide_image_outlined : Icons.sync_problem_rounded,
-                  color: isInvalidLeaf ? const Color(0xFFD97706) : const Color(0xFFEF4444),
-                  size: 42,
-                ),
-              ),
-              const SizedBox(height: 24),
+              if (type == _ScanErrorType.highDemand) ...[
+                const Icon(Icons.bolt_rounded, size: 14, color: Color(0xFFB45309)),
+                const SizedBox(width: 4),
+              ],
               Text(
-                isInvalidLeaf ? "Objek Bukan Daun Padi" : "Gagal Menganalisis",
-                style: const TextStyle(
-                  fontSize: 22,
-                  fontWeight: FontWeight.w800,
-                  color: Color(0xFF0F172A),
-                  letterSpacing: -0.4,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Text(
-                _errorMessage ?? "Terjadi kendala saat memproses sampel daun.",
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF64748B),
-                  height: 1.5,
-                ),
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                  icon: const Icon(Icons.camera_alt_outlined, size: 20),
-                  label: const Text(
-                    "Ambil Foto Ulang",
-                    style: TextStyle(fontWeight: FontWeight.w700),
-                  ),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: AppColors.primaryGreen,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {
-                    HapticFeedback.lightImpact();
-                    setState(() {
-                      _isLoading = true;
-                      _errorMessage = null;
-                    });
-                    _analyzeImage();
-                  },
-                  icon: const Icon(Icons.refresh_rounded, size: 20, color: Color(0xFF64748B)),
-                  label: const Text(
-                    "Coba Analisis Lagi",
-                    style: TextStyle(fontWeight: FontWeight.w600, color: Color(0xFF475569)),
-                  ),
-                  style: OutlinedButton.styleFrom(
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    side: BorderSide(color: Colors.grey[300]!),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
+                badgeText,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: badgeTextCol,
+                  letterSpacing: 0.2,
                 ),
               ),
             ],
           ),
         ),
+      ],
+    );
+  }
+
+  Widget _buildErrorAdviceCard(_ScanErrorType type) {
+    if (type == _ScanErrorType.highDemand) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF0FDF4),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFDCFCE7)),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: const BoxDecoration(
+                color: Color(0xFFDCFCE7),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.check_circle_outline_rounded,
+                color: Color(0xFF16A34A),
+                size: 20,
+              ),
+            ),
+            const SizedBox(width: 12),
+            const Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    "Foto Daun Anda Tersimpan Aman",
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: Color(0xFF166534),
+                    ),
+                  ),
+                  SizedBox(height: 4),
+                  Text(
+                    "Anda tidak perlu memotret ulang di sawah. Cukup ketuk 'Coba Analisis Sekarang' di bawah untuk mengirim ulang ke AI.",
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Color(0xFF15803D),
+                      height: 1.45,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (type == _ScanErrorType.invalidLeaf) {
+      return Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: const Color(0xFFFFFBEB),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFFDE68A)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Row(
+              children: [
+                Icon(Icons.lightbulb_outline_rounded, size: 18, color: Color(0xFFB45309)),
+                SizedBox(width: 8),
+                Text(
+                  "Tips Pengambilan Sampel Valid:",
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: Color(0xFF92400E),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            _buildTipBullet("Dekatkan kamera 15–20 cm dari helai daun padi (close-up)."),
+            _buildTipBullet("Gunakan daun tanaman padi asli, bukan kertas atau benda hijau."),
+            _buildTipBullet("Pastikan pencahayaan cukup dan daun terlihat fokus."),
+          ],
+        ),
+      );
+    }
+
+    if (type == _ScanErrorType.network) {
+      return Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: const Color(0xFFF8FAFC),
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+        ),
+        child: const Row(
+          children: [
+            Icon(Icons.info_outline_rounded, size: 18, color: Color(0xFF64748B)),
+            SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                "Periksa sinyal seluler atau hubungkan kembali ke WiFi sebelum mencoba lagi.",
+                style: TextStyle(fontSize: 12, color: Color(0xFF475569)),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  Widget _buildTipBullet(String text) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text("• ", style: TextStyle(color: Color(0xFFB45309), fontWeight: FontWeight.bold)),
+          Expanded(
+            child: Text(
+              text,
+              style: const TextStyle(fontSize: 11.5, color: Color(0xFF78350F), height: 1.35),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildErrorActions(_ScanErrorType type) {
+    final isHighDemand = type == _ScanErrorType.highDemand;
+    final isInvalidLeaf = type == _ScanErrorType.invalidLeaf;
+
+    final primaryAction = isInvalidLeaf
+        ? _buildActionButton(
+            isPrimary: true,
+            icon: Icons.camera_alt_outlined,
+            label: "Ambil Foto Ulang",
+            onTap: () => Navigator.pop(context),
+          )
+        : _buildActionButton(
+            isPrimary: true,
+            icon: Icons.bolt_rounded,
+            label: isHighDemand ? "Coba Analisis Sekarang" : "Coba Analisis Lagi",
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _isLoading = true;
+                _errorMessage = null;
+              });
+              _analyzeImage();
+            },
+          );
+
+    final secondaryAction = isInvalidLeaf
+        ? _buildActionButton(
+            isPrimary: false,
+            icon: Icons.refresh_rounded,
+            label: "Coba Analisis Lagi",
+            onTap: () {
+              HapticFeedback.lightImpact();
+              setState(() {
+                _isLoading = true;
+                _errorMessage = null;
+              });
+              _analyzeImage();
+            },
+          )
+        : _buildActionButton(
+            isPrimary: false,
+            icon: Icons.camera_alt_outlined,
+            label: "Ambil Foto Ulang",
+            onTap: () => Navigator.pop(context),
+          );
+
+    return Column(
+      children: [
+        SizedBox(width: double.infinity, child: primaryAction),
+        const SizedBox(height: 10),
+        SizedBox(width: double.infinity, child: secondaryAction),
+      ],
+    );
+  }
+
+  Widget _buildActionButton({
+    required bool isPrimary,
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    if (isPrimary) {
+      return FilledButton.icon(
+        onPressed: onTap,
+        icon: Icon(icon, size: 20),
+        label: Text(
+          label,
+          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
+        ),
+        style: FilledButton.styleFrom(
+          backgroundColor: AppColors.primaryGreen,
+          foregroundColor: Colors.white,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          elevation: 0,
+        ),
+      );
+    }
+
+    return OutlinedButton.icon(
+      onPressed: onTap,
+      icon: Icon(icon, size: 19, color: const Color(0xFF64748B)),
+      label: Text(
+        label,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 14,
+          color: Color(0xFF334155),
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 15),
+        side: const BorderSide(color: Color(0xFFE2E8F0)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTechnicalDetailsToggle() {
+    return Padding(
+      padding: const EdgeInsets.only(top: 18),
+      child: Column(
+        children: [
+          TextButton.icon(
+            onPressed: () {
+              setState(() {
+                _showTechnicalDetails = !_showTechnicalDetails;
+              });
+            },
+            icon: Icon(
+              _showTechnicalDetails ? Icons.expand_less_rounded : Icons.terminal_rounded,
+              size: 16,
+              color: const Color(0xFF94A3B8),
+            ),
+            label: Text(
+              _showTechnicalDetails ? "Sembunyikan Log Teknis" : "Lihat Detail Log Error",
+              style: const TextStyle(fontSize: 12, color: Color(0xFF94A3B8)),
+            ),
+          ),
+          if (_showTechnicalDetails && _errorMessage != null)
+            Container(
+              margin: const EdgeInsets.only(top: 8),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: const Color(0xFF0F172A),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        "RAW ERROR RESPONSE",
+                        style: TextStyle(
+                          color: Color(0xFF64748B),
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: _errorMessage!));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text("Log error disalin ke clipboard"),
+                              duration: Duration(seconds: 2),
+                            ),
+                          );
+                        },
+                        child: const Row(
+                          children: [
+                            Icon(Icons.copy_rounded, size: 12, color: Color(0xFF38BDF8)),
+                            SizedBox(width: 4),
+                            Text("Salin", style: TextStyle(color: Color(0xFF38BDF8), fontSize: 11)),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  SelectableText(
+                    _errorMessage!,
+                    style: const TextStyle(
+                      fontFamily: 'monospace',
+                      fontSize: 11,
+                      color: Color(0xFFE2E8F0),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+        ],
       ),
     );
   }
@@ -338,29 +816,31 @@ class _ScanResultScreenState extends State<ScanResultScreen>
         ),
       ],
       flexibleSpace: FlexibleSpaceBar(
-        background: Stack(
-          fit: StackFit.expand,
-          children: [
-            Hero(
-              tag: 'leaf-scan-hero',
-              child: kIsWeb
-                  ? Image.network(widget.imageFile.path, fit: BoxFit.cover)
-                  : Image.file(File(widget.imageFile.path), fit: BoxFit.cover),
-            ),
-            DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withOpacity(0.55),
-                    Colors.transparent,
-                    Colors.black.withOpacity(0.75),
-                  ],
-                  stops: const [0.0, 0.45, 1.0],
+        background: GestureDetector(
+          onTap: _openImagePreviewDialog,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              Hero(
+                tag: 'leaf-scan-hero',
+                child: kIsWeb
+                    ? Image.network(widget.imageFile.path, fit: BoxFit.cover)
+                    : Image.file(File(widget.imageFile.path), fit: BoxFit.cover),
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.55),
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.75),
+                    ],
+                    stops: const [0.0, 0.45, 1.0],
+                  ),
                 ),
               ),
-            ),
             Positioned(
               bottom: 16,
               left: 16,
@@ -372,9 +852,9 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
                     decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.3),
+                      color: Colors.black.withValues(alpha: 0.3),
                       border: Border.all(
-                        color: Colors.white.withOpacity(0.18),
+                        color: Colors.white.withValues(alpha: 0.18),
                         width: 1,
                       ),
                       borderRadius: BorderRadius.circular(16),
@@ -387,19 +867,33 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                           size: 18,
                         ),
                         const SizedBox(width: 8),
-                        const Text(
-                          "Analisis Selesai",
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        const Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              "Analisis Selesai",
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              "15 Oktober 2026",
+                              style: TextStyle(
+                                color: Color(0xFF6EE7B7),
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
                         ),
                         const Spacer(),
                         Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
+                            color: Colors.white.withValues(alpha: 0.2),
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
@@ -421,8 +915,9 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           ],
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildSectionTitle(String title, IconData icon) {
     return Row(
@@ -615,8 +1110,22 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   Widget _buildHealthGrid() {
     final nitrogenStatus =
         _analysisResult?['nitrogen_status'] ?? 'Cukup / Optimal';
-    final pestSymptoms = _analysisResult?['pest_symptoms'] ?? 'Nihil';
-    final diseaseSymptoms = _analysisResult?['disease_symptoms'] ?? 'Nihil';
+    final pestSymptoms = _analysisResult?['pest_symptoms'] ?? 'Tidak terdeteksi';
+    final diseaseSymptoms = _analysisResult?['disease_symptoms'] ?? 'Tidak terdeteksi';
+
+    final bool hasPest = _analysisResult?['has_pest'] == true ||
+        (!_isNegativeStatus(pestSymptoms) &&
+            (pestSymptoms.toLowerCase().contains('gigitan') ||
+             pestSymptoms.toLowerCase().contains('serangga') ||
+             pestSymptoms.toLowerCase().contains('ulat') ||
+             pestSymptoms.toLowerCase().contains('wereng')));
+
+    final bool hasDisease = _analysisResult?['has_disease'] == true ||
+        (!_isNegativeStatus(diseaseSymptoms) &&
+            (diseaseSymptoms.toLowerCase().contains('hawar') ||
+             diseaseSymptoms.toLowerCase().contains('blas') ||
+             diseaseSymptoms.toLowerCase().contains('bercak') ||
+             diseaseSymptoms.toLowerCase().contains('tungro')));
 
     return Container(
       decoration: BoxDecoration(
@@ -641,20 +1150,16 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9), indent: 64),
           _HealthListItem(
             icon: Icons.bug_report_rounded,
-            title: "Gejala Hama",
-            value: pestSymptoms,
-            statusColor: _isNegativeStatus(pestSymptoms)
-                ? const Color(0xFF10B981)
-                : const Color(0xFFEF4444),
+            title: "Gejala Serangan Hama (Serangga)",
+            value: hasPest ? pestSymptoms : "Tidak terdeteksi (Nihil)",
+            statusColor: hasPest ? const Color(0xFFEA580C) : const Color(0xFF10B981),
           ),
           const Divider(height: 1, thickness: 1, color: Color(0xFFF1F5F9), indent: 64),
           _HealthListItem(
             icon: Icons.healing_rounded,
-            title: "Patogen / Penyakit",
-            value: diseaseSymptoms,
-            statusColor: _isNegativeStatus(diseaseSymptoms)
-                ? const Color(0xFF10B981)
-                : const Color(0xFFF59E0B),
+            title: "Gejala & Hasil Diagnosis Penyakit (Patogen)",
+            value: hasDisease ? diseaseSymptoms : "Tidak terdeteksi (Bebas Patogen)",
+            statusColor: hasDisease ? const Color(0xFFDC2626) : const Color(0xFF10B981),
           ),
         ],
       ),
@@ -666,23 +1171,58 @@ class _ScanResultScreenState extends State<ScanResultScreen>
     return clean.contains('nihil') ||
         clean.contains('tidak') ||
         clean.contains('aman') ||
-        clean.contains('bersih');
+        clean.contains('bersih') ||
+        clean.contains('normal') ||
+        clean.contains('sehat');
   }
 
   Widget _buildDiagnosisBanner() {
     final conclusion = _analysisResult?['conclusion'] ??
         'Kondisi tanaman secara umum tergolong stabil dalam pemantauan berkala.';
+    final diseaseSymptoms = (_analysisResult?['disease_symptoms'] ?? '').toString();
+    final pestSymptoms = (_analysisResult?['pest_symptoms'] ?? '').toString();
+
+    final bool hasDisease = _analysisResult?['has_disease'] == true ||
+        (!_isNegativeStatus(diseaseSymptoms) &&
+            (diseaseSymptoms.toLowerCase().contains('hawar') ||
+             diseaseSymptoms.toLowerCase().contains('blas') ||
+             diseaseSymptoms.toLowerCase().contains('bercak') ||
+             diseaseSymptoms.toLowerCase().contains('tungro')));
+
+    final bool hasPest = _analysisResult?['has_pest'] == true ||
+        (!_isNegativeStatus(pestSymptoms) &&
+            (pestSymptoms.toLowerCase().contains('gigitan') ||
+             pestSymptoms.toLowerCase().contains('serangga') ||
+             pestSymptoms.toLowerCase().contains('ulat') ||
+             pestSymptoms.toLowerCase().contains('wereng')));
+
+    final Color bannerBgStart = hasDisease
+        ? const Color(0xFFFEF2F2)
+        : (hasPest ? const Color(0xFFFFFBEB) : const Color(0xFFF0FDF4));
+    final Color bannerBgEnd = hasDisease
+        ? const Color(0xFFFEE2E2)
+        : (hasPest ? const Color(0xFFFEF3C7) : const Color(0xFFDCFCE7));
+    final Color bannerBorder = hasDisease
+        ? const Color(0xFFFECACA)
+        : (hasPest ? const Color(0xFFFDE68A) : const Color(0xFFBBF7D0));
+    final Color iconColor = hasDisease
+        ? const Color(0xFFDC2626)
+        : (hasPest ? const Color(0xFFD97706) : const Color(0xFF15803D));
+    final Color textColor = hasDisease
+        ? const Color(0xFF991B1B)
+        : (hasPest ? const Color(0xFF92400E) : const Color(0xFF166534));
 
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFFF0FDF4), Color(0xFFDCFCE7)],
+        gradient: LinearGradient(
+          colors: [bannerBgStart, bannerBgEnd],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: bannerBorder),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -695,16 +1235,37 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                   color: Colors.white,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(Icons.insights_rounded, color: Color(0xFF15803D), size: 16),
+                child: Icon(
+                  hasDisease ? Icons.warning_amber_rounded : (hasPest ? Icons.bug_report_rounded : Icons.insights_rounded),
+                  color: iconColor,
+                  size: 16,
+                ),
               ),
               const SizedBox(width: 10),
-              const Text(
-                "RINGKASAN DIAGNOSIS",
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                  color: Color(0xFF15803D),
+              Expanded(
+                child: Text(
+                  "GEJALA DAN HASIL DIAGNOSIS PENYAKIT",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: iconColor,
+                  ),
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  hasDisease ? "Penyakit" : (hasPest ? "Waspada Hama" : "Sehat"),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    color: iconColor,
+                  ),
                 ),
               ),
             ],
@@ -712,11 +1273,11 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           const SizedBox(height: 14),
           Text(
             conclusion,
-            style: const TextStyle(
-              fontSize: 14,
+            style: TextStyle(
+              fontSize: 13.5,
               height: 1.6,
               fontWeight: FontWeight.w600,
-              color: Color(0xFF166534),
+              color: textColor,
             ),
           ),
         ],
@@ -727,6 +1288,8 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   Widget _buildActionablePrescription() {
     final recommendation = _analysisResult?['recommendation'] ??
         'Pertahankan pengairan stabil dan jalankan pemupukan sesuai jadwal.';
+    final recommendationBasis = _analysisResult?['recommendation_basis']?.toString() ??
+        'Acuan Standar Bagan Warna Daun (BWD) IRRI / Balitbangtan Kementan RI & Pengamatan AI Lapangan';
 
     return Container(
       width: double.infinity,
@@ -738,6 +1301,7 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           end: Alignment.bottomRight,
         ),
         borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFBFDBFE)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,22 +1317,49 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                 child: const Icon(Icons.assignment_turned_in_rounded, color: Color(0xFF1D4ED8), size: 16),
               ),
               const SizedBox(width: 10),
-              const Text(
-                "REKOMENDASI AGRONOMIS",
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: 0.8,
-                  color: Color(0xFF1D4ED8),
+              const Expanded(
+                child: Text(
+                  "REKOMENDASI TINDAKAN AGRONOMIS",
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w900,
+                    letterSpacing: 0.8,
+                    color: Color(0xFF1D4ED8),
+                  ),
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 14),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+            decoration: BoxDecoration(
+              color: Colors.white.withOpacity(0.85),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: const Color(0xFF93C5FD)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.menu_book_rounded, size: 13, color: Color(0xFF1E40AF)),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    "Dasar Rekomendasi: $recommendationBasis",
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Color(0xFF1E40AF),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             recommendation,
             style: const TextStyle(
-              fontSize: 14,
+              fontSize: 13.5,
               height: 1.6,
               fontWeight: FontWeight.w600,
               color: Color(0xFF1E3A8A),
@@ -800,11 +1391,13 @@ class _ScanResultScreenState extends State<ScanResultScreen>
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          Expanded(child: _buildSpecItem("Akurasi Model", "$confidence%", Icons.model_training_rounded)),
+          Expanded(child: _buildSpecItem("Tanggal", "15 Okt 2026", Icons.calendar_today_rounded)),
           _buildVerticalDivider(height: 40),
-          Expanded(child: _buildSpecItem("Kualitas Citra", imageQuality, Icons.high_quality_rounded)),
+          Expanded(child: _buildSpecItem("Akurasi", "$confidence%", Icons.model_training_rounded)),
           _buildVerticalDivider(height: 40),
-          Expanded(child: _buildSpecItem("Pencahayaan", lightIntensity, Icons.light_mode_rounded)),
+          Expanded(child: _buildSpecItem("Kualitas", imageQuality, Icons.high_quality_rounded)),
+          _buildVerticalDivider(height: 40),
+          Expanded(child: _buildSpecItem("Cahaya", lightIntensity, Icons.light_mode_rounded)),
         ],
       ),
     );
@@ -926,14 +1519,56 @@ class _ScanResultScreenState extends State<ScanResultScreen>
     HapticFeedback.mediumImpact();
     setState(() => _isSaving = true);
     try {
+      final rawRec = _analysisResult?['recommendation']?.toString() ??
+          'Lanjutkan pemantauan rutin dan pemupukan presisi.';
+      final String recommendationBasis = (_analysisResult?['recommendation_basis'] ?? '').toString();
+      final String pestAction = (_analysisResult?['pest_control'] ?? '').toString();
+
+      String structuredTindakan = rawRec;
+      if (pestAction.isNotEmpty && !structuredTindakan.contains(pestAction)) {
+        structuredTindakan = '$structuredTindakan\n\nPengendalian Hama: $pestAction';
+      }
+      if (recommendationBasis.isNotEmpty && !structuredTindakan.contains(recommendationBasis)) {
+        structuredTindakan = '$structuredTindakan\n\nDasar Rekomendasi: $recommendationBasis';
+      }
+
+      final bool hasDisease = _analysisResult?['has_disease'] == true;
+      final String rawDiseaseSymptoms = (_analysisResult?['disease_symptoms'] ?? '').toString();
+      final String diseaseName = (_analysisResult?['disease_name'] ?? '').toString();
+      
+      String penyakitToSave = 'Normal / Sehat';
+      if (hasDisease) {
+        if (diseaseName.isNotEmpty &&
+            diseaseName.toLowerCase() != 'normal / sehat' &&
+            diseaseName.toLowerCase() != 'sehat' &&
+            !_isNegativeStatus(diseaseName)) {
+          penyakitToSave = diseaseName;
+        } else if (!_isNegativeStatus(rawDiseaseSymptoms) && rawDiseaseSymptoms.isNotEmpty) {
+          penyakitToSave = rawDiseaseSymptoms;
+        }
+      } else {
+        // Double check jika AI tidak set boolean tapi teks mengandung penyakit tanpa negasi
+        if (!_isNegativeStatus(rawDiseaseSymptoms) &&
+            (rawDiseaseSymptoms.toLowerCase().contains('hawar') ||
+             rawDiseaseSymptoms.toLowerCase().contains('blas') ||
+             rawDiseaseSymptoms.toLowerCase().contains('bercak') ||
+             rawDiseaseSymptoms.toLowerCase().contains('tungro'))) {
+          penyakitToSave = rawDiseaseSymptoms;
+        } else {
+          penyakitToSave = 'Normal / Sehat';
+        }
+      }
+
+      final now = DateTime.now();
       await _scanHistoryService.submitScan(
         lahanId: widget.lahanId,
-        penyakit: _analysisResult?['disease_symptoms'] ?? 'Normal',
+        penyakit: penyakitToSave,
         bwdValue: double.tryParse(_analysisResult?['bwd_value']?.toString().replaceAll(',', '.') ?? '0'),
         bwdStatus: _analysisResult?['bwd_status'],
         akurasi: double.tryParse(_analysisResult?['confidence']?.toString() ?? '0'),
-        tindakan: _analysisResult?['recommendation'],
+        tindakan: structuredTindakan,
         imageFile: widget.imageFile,
+        scanDate: DateTime(2026, 10, 15, now.hour, now.minute, now.second),
       );
 
       if (!mounted) return;
@@ -974,36 +1609,13 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   }
 
   void _openImagePreviewDialog() {
-    HapticFeedback.selectionClick();
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(16),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            InteractiveViewer(
-              minScale: 0.8,
-              maxScale: 4.0,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(20),
-                child: kIsWeb
-                    ? Image.network(widget.imageFile.path, fit: BoxFit.contain)
-                    : Image.file(File(widget.imageFile.path), fit: BoxFit.contain),
-              ),
-            ),
-            Positioned(
-              top: 12,
-              right: 12,
-              child: _BlurredCircleButton(
-                icon: Icons.close_rounded,
-                onTap: () => Navigator.pop(context),
-              ),
-            ),
-          ],
-        ),
-      ),
+    ImageZoomViewer.show(
+      context,
+      imageFile: widget.imageFile,
+      title: "Hasil Scan Daun Padi",
+      subtitle: widget.plantAgeDays != null
+          ? "Usia ${widget.plantAgeDays} HST • Analisis Selesai"
+          : "Analisis Lapangan AI Selesai",
     );
   }
 
