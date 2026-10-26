@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:mulyaharja_padinexa/screens/main_navigation.dart';
 import 'package:mulyaharja_padinexa/services/auth_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../utils/app_colors.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -24,6 +25,21 @@ class _LoginScreenState extends State<LoginScreen> {
   void initState() {
     super.initState();
     _emailController.addListener(_onEmailChanged);
+    _loadSavedPreferences();
+  }
+
+  Future<void> _loadSavedPreferences() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final rememberMe = prefs.getBool('remember_me') ?? false;
+      final savedEmail = prefs.getString('saved_email') ?? '';
+      if (mounted && rememberMe && savedEmail.isNotEmpty) {
+        setState(() {
+          _rememberMe = true;
+          _emailController.text = savedEmail;
+        });
+      }
+    } catch (_) {}
   }
 
   void _onEmailChanged() {
@@ -55,6 +71,17 @@ class _LoginScreenState extends State<LoginScreen> {
       }
 
       await _authService.login(email, password);
+
+      // Simpan preferensi Ingat Saya dan tandai onboarding sudah selesai
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('has_seen_onboarding', true);
+      if (_rememberMe) {
+        await prefs.setBool('remember_me', true);
+        await prefs.setString('saved_email', email);
+      } else {
+        await prefs.setBool('remember_me', false);
+        await prefs.remove('saved_email');
+      }
 
       if (!mounted) return;
 
