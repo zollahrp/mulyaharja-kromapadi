@@ -804,8 +804,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     borderRadius: BorderRadius.circular(20),
                   ),
                   child: Image.asset(
-                    'assets/images/logo-original.png',
-                    height: 80,
+                    'assets/images/logo-mark.png',
+                    height: 64,
+                    width: 64,
                     fit: BoxFit.contain,
                     errorBuilder: (ctx, err, stack) => const Icon(
                       Icons.eco_rounded,
