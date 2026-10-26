@@ -25,6 +25,8 @@ class ScanResultScreen extends StatefulWidget {
   final int lahanId;
   final int? luxValue;
   final int? plantAgeDays;
+  final String? lahanName;
+  final double? lahanLuasM2;
 
   const ScanResultScreen({
     super.key,
@@ -32,6 +34,8 @@ class ScanResultScreen extends StatefulWidget {
     required this.lahanId,
     this.luxValue,
     this.plantAgeDays,
+    this.lahanName,
+    this.lahanLuasM2,
   });
 
   @override
@@ -51,6 +55,7 @@ class _ScanResultScreenState extends State<ScanResultScreen>
 
   double? _temp;
   int? _humidity;
+  late double? _currentLuasM2;
 
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
@@ -59,6 +64,7 @@ class _ScanResultScreenState extends State<ScanResultScreen>
   @override
   void initState() {
     super.initState();
+    _currentLuasM2 = widget.lahanLuasM2;
     _fadeController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 650),
@@ -135,6 +141,8 @@ class _ScanResultScreenState extends State<ScanResultScreen>
         humidity: humidity,
         lux: widget.luxValue,
         plantAgeDays: widget.plantAgeDays,
+        fieldAreaM2: _currentLuasM2,
+        fieldName: widget.lahanName,
       );
 
       if (!mounted) return;
@@ -778,6 +786,10 @@ class _ScanResultScreenState extends State<ScanResultScreen>
                     _buildDiagnosisBanner(),
                     const SizedBox(height: 16),
                     _buildActionablePrescription(),
+                    const SizedBox(height: 28),
+                    _buildSectionTitle("Kalkulator Nutrisi & Dosis Lahan", Icons.balance_rounded),
+                    const SizedBox(height: 16),
+                    _buildFertilizerFieldDistributionCard(),
                     const SizedBox(height: 32),
                     _buildSectionTitle("Spesifikasi Analisis", Icons.analytics_rounded),
                     const SizedBox(height: 16),
@@ -1334,7 +1346,7 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.85),
+              color: Colors.white.withValues(alpha: 0.85),
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: const Color(0xFF93C5FD)),
             ),
@@ -1367,6 +1379,522 @@ class _ScanResultScreenState extends State<ScanResultScreen>
           ),
         ],
       ),
+    );
+  }
+
+  Widget _buildFertilizerFieldDistributionCard() {
+    final double activeLuas = _currentLuasM2 ?? 1000.0;
+    final double luasHa = activeLuas / 10000.0;
+
+    final bwdRaw = _analysisResult?['bwd_value']?.toString() ?? '3.0';
+    final double bwdVal = double.tryParse(bwdRaw.replaceAll(',', '.')) ?? 3.0;
+
+    double dosePerHa = 0.0;
+    if (_analysisResult?['fertilizer_dose_per_ha_kg'] != null) {
+      dosePerHa = double.tryParse(_analysisResult!['fertilizer_dose_per_ha_kg'].toString()) ?? 0.0;
+    } else {
+      if (bwdVal <= 2.5) {
+        dosePerHa = 100.0;
+      } else if (bwdVal <= 3.5) {
+        dosePerHa = 75.0;
+      } else if (bwdVal < 4.0) {
+        dosePerHa = 50.0;
+      } else {
+        dosePerHa = 0.0;
+      }
+    }
+
+    double doseForField = 0.0;
+    if (_currentLuasM2 != null && _currentLuasM2 == widget.lahanLuasM2 && _analysisResult?['fertilizer_dose_for_field_kg'] != null) {
+      doseForField = double.tryParse(_analysisResult!['fertilizer_dose_for_field_kg'].toString()) ?? (dosePerHa * luasHa);
+    } else {
+      doseForField = dosePerHa * luasHa;
+    }
+
+    int numBuckets = 1;
+    if (doseForField > 40.0) {
+      numBuckets = 4;
+    } else if (doseForField > 20.0) {
+      numBuckets = 3;
+    } else if (doseForField > 7.0) {
+      numBuckets = 2;
+    } else {
+      numBuckets = 1;
+    }
+    final double dosePerBucket = numBuckets > 0 ? (doseForField / numBuckets) : doseForField;
+    final double dosePer100M2 = activeLuas > 0 ? (doseForField / (activeLuas / 100.0)) : 0.0;
+
+    final String aiGuide = (_analysisResult?['fertilizer_distribution_guide'] ?? '').toString();
+    final String distributionGuide = aiGuide.isNotEmpty
+        ? aiGuide
+        : (doseForField > 0
+            ? "Bagi pupuk Urea menjadi $numBuckets wadah/ember (masing-masing ~${dosePerBucket.toStringAsFixed(1)} kg). Tebar merata secara silang (50% arah utara-selatan dan 50% timur-barat) saat kondisi air macak-macak (1-2 cm). Tutup saluran pembuangan air selama 2-3 hari agar nutrisi diserap optimal ke rhizosfer dan tidak hanyut terbawa aliran."
+            : "Warna daun berada pada tingkat kehijauan optimal (BWD ≥ 4.0). Tidak diperlukan tambahan pupuk Urea saat ini guna menghindari rebah tanaman dan serangan penyakit blas.");
+
+    return Container(
+      width: double.infinity,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x080F172A),
+            blurRadius: 16,
+            offset: Offset(0, 8),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: const BoxDecoration(
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              gradient: LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF10B981).withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.calculate_rounded, color: Color(0xFF34D399), size: 22),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        "Kalkulator Nutrisi & Dosis Lahan",
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        "${widget.lahanName ?? 'Petak Terpilih'} • ${activeLuas.toInt()} m² (${luasHa.toStringAsFixed(2)} Ha)",
+                        style: const TextStyle(
+                          color: Color(0xFF94A3B8),
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                InkWell(
+                  onTap: _showAdjustAreaDialog,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.tune_rounded, size: 14, color: Color(0xFF38BDF8)),
+                        SizedBox(width: 4),
+                        Text(
+                          "Ubah Luas",
+                          style: TextStyle(
+                            color: Color(0xFF38BDF8),
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFE2E8F0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.grid_view_rounded, size: 14, color: Color(0xFF64748B)),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    "Standar BWD",
+                                    style: TextStyle(fontSize: 11, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              "${dosePerHa.toInt()}",
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const Text(
+                              "kg Urea / Hektar",
+                              style: TextStyle(fontSize: 11, color: Color(0xFF94A3B8), fontWeight: FontWeight.w500),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFECFDF5),
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: const Color(0xFFA7F3D0)),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Row(
+                              children: [
+                                Icon(Icons.check_circle_rounded, size: 14, color: Color(0xFF059669)),
+                                SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    "Kebutuhan Petak",
+                                    style: TextStyle(fontSize: 11, color: Color(0xFF059669), fontWeight: FontWeight.w700),
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 8),
+                            Text(
+                              doseForField.toStringAsFixed(1),
+                              style: const TextStyle(
+                                fontSize: 24,
+                                fontWeight: FontWeight.w900,
+                                color: Color(0xFF065F46),
+                              ),
+                            ),
+                            Text(
+                              "kg Urea (${activeLuas.toInt()} m²)",
+                              style: const TextStyle(fontSize: 11, color: Color(0xFF047857), fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 20),
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF0FDF4),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: const Color(0xFFBBF7D0)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Color(0xFF10B981),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.share_rounded, size: 14, color: Colors.white),
+                          ),
+                          const SizedBox(width: 10),
+                          const Expanded(
+                            child: Text(
+                              "LOGIKA DISTRIBUSI & PEMBAGIAN NUTRISI",
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w800,
+                                color: Color(0xFF065F46),
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      const Text(
+                        "Secara logika agronomi: karena luas lahan sawah luas, pupuk tidak boleh ditebar menumpuk di satu tempat. Nutrisi wajib dipecah dan dibagi merata agar setiap rumpun mendapatkan porsi hara seimbang.",
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          height: 1.5,
+                          color: Color(0xFF166534),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildDistributionMiniPill(
+                              icon: Icons.shopping_bag_outlined,
+                              title: "Bagi ke Wadah",
+                              value: "$numBuckets Ember",
+                              sub: "~${dosePerBucket.toStringAsFixed(1)} kg/ember",
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDistributionMiniPill(
+                              icon: Icons.sync_alt_rounded,
+                              title: "Pola Sebar",
+                              value: "Silang 2 Arah",
+                              sub: "50% tegak / 50% silang",
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDistributionMiniPill(
+                              icon: Icons.pin_drop_outlined,
+                              title: "Konsentrasi",
+                              value: "~${dosePer100M2.toStringAsFixed(1)} kg",
+                              sub: "per 100 m² lahan",
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF8FAFC),
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: const Color(0xFFE2E8F0)),
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Icon(Icons.lightbulb_outline_rounded, color: Color(0xFFF59E0B), size: 20),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              "Petunjuk Aplikasi Lapangan:",
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.bold,
+                                color: Color(0xFF1E293B),
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              distributionGuide,
+                              style: const TextStyle(
+                                fontSize: 12,
+                                height: 1.55,
+                                color: Color(0xFF475569),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDistributionMiniPill({
+    required IconData icon,
+    required String title,
+    required String value,
+    required String sub,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 6),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFA7F3D0)),
+      ),
+      child: Column(
+        children: [
+          Icon(icon, size: 16, color: const Color(0xFF059669)),
+          const SizedBox(height: 6),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 10, color: Color(0xFF64748B), fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF065F46)),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 2),
+          Text(
+            sub,
+            style: const TextStyle(fontSize: 9, color: Color(0xFF94A3B8)),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showAdjustAreaDialog() {
+    final TextEditingController areaController = TextEditingController(
+      text: (_currentLuasM2 ?? 1000.0).toInt().toString(),
+    );
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(ctx).viewInsets.bottom + 24,
+            left: 24,
+            right: 24,
+            top: 24,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  const Text(
+                    "Simulasi / Ubah Luas Petak",
+                    style: TextStyle(
+                      fontSize: 17,
+                      fontWeight: FontWeight.bold,
+                      color: Color(0xFF0F172A),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              const Text(
+                "Pilih ukuran cepat atau ketik luas petak sawah Anda (m²) untuk melihat pembagian dosis pupuk secara proporsional.",
+                style: TextStyle(fontSize: 13, color: Color(0xFF64748B)),
+              ),
+              const SizedBox(height: 16),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [500, 1000, 1500, 2500, 5000, 10000].map((preset) {
+                  final isSelected = (_currentLuasM2?.toInt() == preset);
+                  return ActionChip(
+                    label: Text(
+                      preset >= 10000 ? "1 Ha (10.000 m²)" : "$preset m²",
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                        color: isSelected ? Colors.white : const Color(0xFF334155),
+                      ),
+                    ),
+                    backgroundColor: isSelected ? AppColors.primaryGreen : const Color(0xFFF1F5F9),
+                    side: BorderSide.none,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    onPressed: () {
+                      setState(() {
+                        _currentLuasM2 = preset.toDouble();
+                      });
+                      Navigator.pop(ctx);
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+              TextField(
+                controller: areaController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: "Ketik Luas Kustom (m²)",
+                  hintText: "Contoh: 1200",
+                  suffixText: "m²",
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                  filled: true,
+                  fillColor: const Color(0xFFF8FAFC),
+                ),
+              ),
+              const SizedBox(height: 20),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    final entered = double.tryParse(areaController.text.trim());
+                    if (entered != null && entered > 0) {
+                      setState(() {
+                        _currentLuasM2 = entered;
+                      });
+                    }
+                    Navigator.pop(ctx);
+                  },
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primaryGreen,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  child: const Text(
+                    "Terapkan Kalkulasi Luas",
+                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
     );
   }
 
@@ -1531,6 +2059,22 @@ class _ScanResultScreenState extends State<ScanResultScreen>
       if (recommendationBasis.isNotEmpty && !structuredTindakan.contains(recommendationBasis)) {
         structuredTindakan = '$structuredTindakan\n\nDasar Rekomendasi: $recommendationBasis';
       }
+
+      final activeLuas = _currentLuasM2 ?? 1000.0;
+      final double luasHa = activeLuas / 10000.0;
+      final bwdRaw = _analysisResult?['bwd_value']?.toString() ?? '3.0';
+      final double bwdVal = double.tryParse(bwdRaw.replaceAll(',', '.')) ?? 3.0;
+
+      double dosePerHa = 0.0;
+      if (_analysisResult?['fertilizer_dose_per_ha_kg'] != null) {
+        dosePerHa = double.tryParse(_analysisResult!['fertilizer_dose_per_ha_kg'].toString()) ?? 0.0;
+      } else {
+        dosePerHa = bwdVal <= 2.5 ? 100.0 : (bwdVal <= 3.5 ? 75.0 : (bwdVal < 4.0 ? 50.0 : 0.0));
+      }
+      final double doseReal = dosePerHa * luasHa;
+      final String distGuide = (_analysisResult?['fertilizer_distribution_guide'] ?? '').toString();
+
+      structuredTindakan = '$structuredTindakan\n\nKalkulator Dosis Lahan (${activeLuas.toInt()} m² / ${luasHa.toStringAsFixed(2)} Ha): ${doseReal.toStringAsFixed(1)} kg Urea (Standar: ${dosePerHa.toInt()} kg/ha).\nDistribusi Nutrisi: ${distGuide.isNotEmpty ? distGuide : "Bagi pemupukan merata dan sebar silang saat air macak-macak."}';
 
       final bool hasDisease = _analysisResult?['has_disease'] == true;
       final String rawDiseaseSymptoms = (_analysisResult?['disease_symptoms'] ?? '').toString();

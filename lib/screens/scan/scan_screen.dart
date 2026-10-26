@@ -362,6 +362,8 @@ class _ScanScreenState extends State<ScanScreen> with SingleTickerProviderStateM
           lahanId: _selectedLahan!.id,
           luxValue: luxValue,
           plantAgeDays: plantAgeDays,
+          lahanName: _selectedLahan?.name,
+          lahanLuasM2: _selectedLahan?.luas != null ? _selectedLahan!.luas!.toDouble() : null,
         ),
       ),
     );

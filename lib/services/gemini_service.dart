@@ -28,13 +28,20 @@ class GeminiService {
     int? humidity,
     int? lux,
     int? plantAgeDays,
+    double? fieldAreaM2,
+    String? fieldName,
   }) async {
     try {
       final imageBytes = await imageFile.readAsBytes();
       
       String envData = "";
-      if (weather != null || temperature != null || lux != null || plantAgeDays != null) {
-        envData = "Data Lingkungan dan Tanaman:\n";
+      if (weather != null || temperature != null || lux != null || plantAgeDays != null || fieldAreaM2 != null || fieldName != null) {
+        envData = "Data Lingkungan dan Lahan Pertanian:\n";
+        if (fieldName != null && fieldName.isNotEmpty) envData += "- Nama Petak Lahan: $fieldName\n";
+        if (fieldAreaM2 != null && fieldAreaM2 > 0) {
+          final double luasHa = fieldAreaM2 / 10000.0;
+          envData += "- Luas Petak Lahan Petani: ${fieldAreaM2.toInt()} m² (${luasHa.toStringAsFixed(2)} Hektar)\n";
+        }
         if (plantAgeDays != null) envData += "- Umur Tanaman: $plantAgeDays Hari Setelah Tanam (HST)\n";
         if (weather != null) envData += "- Cuaca: $weather\n";
         if (temperature != null) envData += "- Suhu: $temperature °C\n";
@@ -100,6 +107,14 @@ ACUAN REKOMENDASI PEMUPUKAN UREA BERDASARKAN TINGKAT HASIL (GKG):
 - Target 7 t/ha: Nilai BWD 2-3 (125 kg/ha), Antara 3-4 (100 kg/ha), 4-5 (50 kg/ha)
 - Target 8 t/ha: Nilai BWD 2-3 (150 kg/ha), Antara 3-4 (125 kg/ha), 4-5 (50 kg/ha)
 
+KALKULASI KEBUTUHAN NUTRISI & DOSIS PUPUK PROPORSIONAL (SANGAT PENTING):
+Standar Balitbangtan/IRRI menyatakan dosis dalam satuan hektar (kg/ha).
+Namun petani memiliki luas petak spesifik (data luas terlampir di atas).
+Secara logika ilmiah agronomi:
+1. Luas lahan menentukan kuota total nutrisi (kg) yang dibutuhkan: Semakin besar petak sawah, total kebutuhan pupuk semakin besar.
+2. Dosis Nyata Petak = Dosis per Hektar * (Luas_m2 / 10000). (Contoh: Dosis 100 kg/ha untuk lahan 1.500 m² = 100 * 0.15 = 15 kg Urea).
+3. Distribusi Nutrisi: Pada luasan yang lebih besar, nutrisi harus dibagi dan disebar secara merata (misal dibagi menjadi 2 wadah untuk penaburan silang utara-selatan dan timur-barat saat kondisi air macak-macak/sedikit air) agar pupuk tidak terkonsentrasi di satu titik yang dapat membakar akar atau menimbulkan defisiensi di titik lain.
+
 PRINSIP ILMIAH AGRONOMI (HAMA vs PENYAKIT PATOGEN):
 1. HAMA TANAMAN (PEST): Kerusakan fisik/mekanis oleh organisme hewan/serangga (contoh: bekas gigitan serangga, ulat penggulung daun, lubang gerek, wereng batang coklat). JANGAN PERNAH mengelompokkan gigitan serangga atau hama sebagai infeksi penyakit!
 2. PENYAKIT TANAMAN (DISEASE): Infeksi patogen mikroorganisme (jamur/fungi, bakteri, virus) seperti Hawar Daun Bakteri (Xanthomonas oryzae), Blas Daun (Pyricularia oryzae), Bercak Coklat (Bipolaris oryzae), atau Tungro.
@@ -112,6 +127,9 @@ FORMAT OUTPUT JIKA DAUN PADI VALID (HANYA JSON murni tanpa markdown):
   "bwd_value": <float, estimasi nilai BWD antara 1.0 sampai 5.0>,
   "bwd_status": <string, misal "Sangat rendah", "Rendah", "Cukup", "Tinggi", "Sangat tinggi">,
   "nitrogen_status": <string, misal "Sangat rendah", "Berpotensi kurang", "Cukup", "Tinggi">,
+  "fertilizer_dose_per_ha_kg": <integer/float, dosis rekomendasi Urea standar per hektar misal 75, 100, 125, atau 0 jika ideal>,
+  "fertilizer_dose_for_field_kg": <float, dosis nyata pupuk Urea spesifik untuk luas petak sawah petani saat ini, bulatkan ke 1 desimal>,
+  "fertilizer_distribution_guide": <string, instruksi praktis pembagian dan penyebaran nutrisi secara merata di lahan tersebut>,
   "has_pest": <boolean, true jika terdeteksi kerusakan/serangan hama serangga atau ulat, false jika nihil/bersih>,
   "pest_name": <string, misal "Bekas Gigitan Serangga", "Ulat Penggulung Daun", atau "Nihil">,
   "pest_symptoms": <string, detail gejala hama serangga atau "Tidak terdeteksi serangan hama">,
